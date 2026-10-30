@@ -8,11 +8,9 @@
   "version": "1.0.0",
   "taptap_publish": {
     "title": "数独",
-    "description": "",
     "category": "casual",
     "screen_orientation": "landscape",
     "collection_type": "sce",
-    "trial_note": "",
     "app_platforms": "1,2",
     "app_id": 1012043,
     "developer_id": 492262,
@@ -21,6 +19,14 @@
   "assets": {
     "icon": "",
     "screenshots": [],
-    "promotional_image": ""
+    "promotional_image": "",
+    "icon_url": "https://img.tapimg.com/market/images/ef4719159691d7db73760cadfc67eac4.png"
+  },
+  "metadata": {
+    "updated_at": "2026-10-30T17:04:56.895Z"
+  },
+  "test_qrcode": {
+    "url": "https://tapcode-sce.spark.xd.com/qrcode/m_1d8f_1793379896754.png",
+    "generated_at": "2026-10-30T17:04:56.895Z"
   }
 }
