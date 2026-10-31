@@ -5,7 +5,7 @@
     "id": "704603814"
   },
   "entry": "main.lua",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "taptap_publish": {
     "title": "数独",
     "category": "casual",
@@ -23,11 +23,11 @@
     "icon_url": "https://img.tapimg.com/market/images/ef4719159691d7db73760cadfc67eac4.png"
   },
   "metadata": {
-    "updated_at": "2026-10-31T04:37:59.160Z"
+    "updated_at": "2026-10-31T04:41:38.097Z"
   },
   "test_qrcode": {
-    "url": "https://tapcode-sce.spark.xd.com/qrcode/m_1d8f_1793421479055.png",
-    "generated_at": "2026-10-31T04:37:59.160Z"
+    "url": "https://tapcode-sce.spark.xd.com/qrcode/m_1d8f_1793421697960.png",
+    "generated_at": "2026-10-31T04:41:38.097Z"
   },
   "dc_publish_sync": {
     "synced": false,
