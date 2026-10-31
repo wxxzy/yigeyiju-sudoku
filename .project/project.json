@@ -5,10 +5,10 @@
     "id": "704603814"
   },
   "entry": "main.lua",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "taptap_publish": {
     "title": "唯一解",
-    "category": "casual",
+    "category": "trivia",
     "screen_orientation": "portrait",
     "collection_type": "sce",
     "app_platforms": "1,2",
@@ -16,16 +16,33 @@
     "developer_id": 492262,
     "miniapp_id": "tapmcnb6kejwswpr0o",
     "trial_note": "我自己玩手机数独时最烦两件事：一是难度标签名不副实，号称\"简单\"却要先学会怎么找唯一解；二是提示直接给答案，等于替你把题做了。\n这一版把四档难度按\"到底需要哪一层技巧\"重新分级——简单档保证只靠扫候选就能填完，普通才引入唯一位置，困难需要区块排除，专家才真的要动脑。提示也改成两段：第一次只告诉你这一格为什么能确定，第二次你确认了才替你落笔。自动候选和同数字高亮可以随时开关，想硬核就关掉。\n如果你在\"简单\"档还是卡住了，那不是你的问题，是题出得不够好。欢迎来骂。",
-    "description": "《唯一解》是一款数独游戏：把 1 到 9 填进 9×9 的棋盘，让每行、每列、每宫都不重复。\n· 玩法：点格子选中，点数字填入；填错会标红并计入错误数，笔记模式可以先标候选\n· 四档难度按技巧分级：简单只需扫候选，普通要找唯一位置，困难要区块排除，专家要进阶技巧\n· 辅助：自动候选、同数字高亮、无限撤销、两段式提示（先指路，再落笔）\n· 记录：每档难度独立记录最佳用时，通关有成绩结算，退出自动续档\n· 无弹窗打扰，竖屏单手可玩"
+    "description": "《唯一解》是一款数独游戏：把 1 到 9 填进 9×9 的棋盘，让每行、每列、每宫都不重复。\n· 玩法：点格子选中，点数字填入；填错会标红并计入错误数，笔记模式可以先标候选\n· 四档难度按技巧分级：简单只需扫候选，普通要找唯一位置，困难要区块排除，专家要进阶技巧\n· 辅助：自动候选、同数字高亮、无限撤销、两段式提示（先指路，再落笔）\n· 记录：每档难度独立记录最佳用时，通关有成绩结算，退出自动续档\n· 无弹窗打扰，竖屏单手可玩",
+    "gameplay_demo_video_id": 6039793
   },
   "assets": {
     "icon": "./_uploads/724c1239f0f83f0de4f6adabc4779c02cb690b96caf0cf50d7061c78beda782d.png",
-    "screenshots": [],
+    "screenshots": [
+      "",
+      "",
+      ""
+    ],
     "promotional_image": "",
-    "icon_url": "https://img-tc.tapimg.com/market/images/FtwBqY2a99RYWkmI2xpKEEASVDoj.png"
+    "icon_url": "https://img-tc.tapimg.com/market/images/FtwBqY2a99RYWkmI2xpKEEASVDoj.png",
+    "screenshot_urls": [
+      "https://img-tc.tapimg.com/market/images/89a6daceb7a9e0945fc5bd5e82883866.png",
+      "https://img-tc.tapimg.com/market/images/cc6787d36894e17f8211b4a895c9c98d.png",
+      "https://img-tc.tapimg.com/market/images/6754a115016cd24241854ca8f4574f9b.png"
+    ],
+    "cover_vertical": "./_uploads/fc79d5b5aa9f424bf996acdd48ba49d391a2e0a4c873f9d51116c507c4cb632f.png",
+    "cover_vertical_url": "https://img-tc.tapimg.com/market/images/FgcPV7AHE-F_81emjhY1Yg3aMQ2K.png",
+    "cover_horizontal": "./_uploads/e3bc2c289a3d85da2626d77ed9ce60aef4793cd3921a69a89b7d7bf165c37b4b.png",
+    "cover_horizontal_url": "https://img-tc.tapimg.com/market/images/Fq69nIInHLv4ZUpsMSTgGLTOsHXc.png",
+    "square_promotional_image": "./_uploads/81222d0948d257dd9512e90a31116a786f18db245e53afae8dbd6585675b3cb9.png",
+    "square_promotional_image_url": "https://img-tc.tapimg.com/market/images/FsZD4uCnOcWcsq0w6lEP8HMAN0tp.png",
+    "promotional_image_url": "https://img-tc.tapimg.com/market/images/15a1be1cfa20495b9a6d92d74c4a3f75.png"
   },
   "metadata": {
-    "updated_at": "2026-10-31T05:37:09.146Z"
+    "updated_at": "2026-10-31T05:59:34.570Z"
   },
   "test_qrcode": {
     "url": "https://tapcode-sce.spark.xd.com/qrcode/m_1d8f_1793425029004.png",
@@ -36,18 +53,22 @@
     "dcVersion": "V-20261031",
     "dcStatus": "INIT",
     "baseFields": {
-      "title": "数独",
-      "description": null,
-      "category": "casual",
+      "title": "唯一解",
+      "description": "《唯一解》是一款数独游戏：把 1 到 9 填进 9×9 的棋盘，让每行、每列、每宫都不重复。\n· 玩法：点格子选中，点数字填入；填错会标红并计入错误数，笔记模式可以先标候选\n· 四档难度按技巧分级：简单只需扫候选，普通要找唯一位置，困难要区块排除，专家要进阶技巧\n· 辅助：自动候选、同数字高亮、无限撤销、两段式提示（先指路，再落笔）\n· 记录：每档难度独立记录最佳用时，通关有成绩结算，退出自动续档\n· 无弹窗打扰，竖屏单手可玩",
+      "category": "trivia",
       "trial_note": "我自己玩手机数独时最烦两件事：一是难度标签名不副实，号称\"简单\"却要先学会怎么找唯一解；二是提示直接给答案，等于替你把题做了。\n这一版把四档难度按\"到底需要哪一层技巧\"重新分级——简单档保证只靠扫候选就能填完，普通才引入唯一位置，困难需要区块排除，专家才真的要动脑。提示也改成两段：第一次只告诉你这一格为什么能确定，第二次你确认了才替你落笔。自动候选和同数字高亮可以随时开关，想硬核就关掉。\n如果你在\"简单\"档还是卡住了，那不是你的问题，是题出得不够好。欢迎来骂。",
       "icon_url": "https://img-tc.tapimg.com/market/images/FtwBqY2a99RYWkmI2xpKEEASVDoj.png",
-      "banner_url": null,
-      "square_promo_url": null,
-      "cover_horizontal_url": null,
-      "cover_vertical_url": null,
-      "screenshot_urls": null
+      "banner_url": "https://img-tc.tapimg.com/market/images/15a1be1cfa20495b9a6d92d74c4a3f75.png",
+      "square_promo_url": "https://img-tc.tapimg.com/market/images/FsZD4uCnOcWcsq0w6lEP8HMAN0tp.png",
+      "cover_horizontal_url": "https://img-tc.tapimg.com/market/images/Fq69nIInHLv4ZUpsMSTgGLTOsHXc.png",
+      "cover_vertical_url": "https://img-tc.tapimg.com/market/images/FgcPV7AHE-F_81emjhY1Yg3aMQ2K.png",
+      "screenshot_urls": [
+        "https://img-tc.tapimg.com/market/images/89a6daceb7a9e0945fc5bd5e82883866.png",
+        "https://img-tc.tapimg.com/market/images/cc6787d36894e17f8211b4a895c9c98d.png",
+        "https://img-tc.tapimg.com/market/images/6754a115016cd24241854ca8f4574f9b.png"
+      ]
     },
     "pending": {},
-    "baseGameplayDemoVideoId": 0
+    "baseGameplayDemoVideoId": 6039793
   }
 }
