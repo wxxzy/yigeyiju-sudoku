@@ -14,6 +14,9 @@ local UI = require("urhox-libs/UI")
 local Board = require "game.board"
 local Sudoku = require "game.sudoku"
 local Records = require "game.records"
+local Daily = require "game.daily"
+local Settings = require "game.settings"
+local Sfx = require "game.sfx"
 local Storage = require "game.storage"
 local BoardView = require "ui.board_view"
 local Keypad = require "ui.keypad"
@@ -25,6 +28,7 @@ local CONFIG = {
     Difficulty = "normal",
     LayoutCheckInterval = 0.25, -- 秒：多久重测一次可用空间
     AutosaveInterval = 10, -- 秒：有改动后多久落一次存档
+    StatsReserve = 42, -- 棋盘下方成绩条占用（22 高 + 10 间距 + 边框余量）
 }
 
 -- 长生命周期引用（Start/Stop 是全局函数，状态只能放模块级）
@@ -35,10 +39,13 @@ local hud_ = nil
 local root_ = nil
 local boardArea_ = nil
 local resultShown_ = false
+local pendingDaily_ = false -- 确认框点「开新局」时，是否要开每日一题
 
 -- 待开局难度（难度按钮改的是它，真正开局要按「新局」并确认）
 local pendingDifficulty_ = CONFIG.Difficulty
 local records_ = Records.new()
+local settings_ = Settings.new()
+local failShown_ = false
 
 -- 自适应与存档
 local layoutTimer_ = 0
@@ -64,15 +71,20 @@ function Start()
     records_ = Records.new()
 
     BuildUI()
+    ApplySettings(false)
 
     -- 历史成绩（同步/异步都可能，读到即更新）
     Storage.loadStats(function(data)
         records_ = Records.sanitize(data)
+        settings_ = records_.settings
+        ApplySettings(false)
         local n = 0
         for _ in pairs(records_.best) do
             n = n + 1
         end
-        print("=== 已载入历史成绩：" .. n .. " 档 ===")
+        RefreshDailyButton()
+        print("=== 已载入历史成绩：" .. n .. " 档，累计通关 "
+            .. tostring(Records.clearedCount(records_)) .. " 局 ===")
     end)
 
     -- 再尝试续上次进度（本地/云端回调可能同步，因此放在建完 UI 之后）
@@ -81,7 +93,15 @@ function Start()
         if saveDirty_ or board_.started then
             return
         end
+        -- 每日一题只在当天有效：隔天的存档不续（避免玩家以为今天做过了）
+        local dk = data and data.daily
+        if type(dk) == "string" and #dk == 10 and dk ~= Daily.today() then
+            print("=== 每日一题已过期（" .. dk .. "），本次开普通局 ===")
+            return
+        end
         if board_:restore(data) then
+            ApplySettings(false)
+            failShown_ = false
             pendingDifficulty_ = board_.difficulty
             hud_:setDifficulty(pendingDifficulty_)
             hud_:setPendingMismatch(false)
@@ -93,6 +113,7 @@ function Start()
     end)
 
     hud_:setDifficulty(pendingDifficulty_)
+    RefreshDailyButton()
     RefreshAll()
     FitBoard()
 
@@ -124,13 +145,7 @@ function BuildUI()
     end)
 
     keypad_ = Keypad.new {
-        onDigit = function(n)
-            if hud_:isModalOpen() then
-                return
-            end
-            board_:input(n)
-            RefreshAll()
-        end,
+        onDigit = InputDigit,
         onErase = function()
             if hud_:isModalOpen() then
                 return
@@ -151,7 +166,10 @@ function BuildUI()
             end
             -- 第一次点：标出可确定的格并说明理由；再点一次才填入
             if board_.hintIdx then
+                local idx = board_.hintIdx
                 board_:applyHint()
+                boardView_:flash(idx, "hint")
+                Sfx.play("place")
                 RefreshAll()
                 return
             end
@@ -187,18 +205,60 @@ function BuildUI()
             CycleDifficulty()
         end,
         onConfirmNewGame = function()
+            if pendingDaily_ then
+                pendingDaily_ = false
+                local key = Daily.today()
+                if key then
+                    BeginDaily(key)
+                    return
+                end
+            end
+            StartNewGame(pendingDifficulty_)
+        end,
+        onDaily = function()
+            StartDaily()
+        end,
+        onPause = function()
+            TogglePause()
+        end,
+        onResume = function()
+            TogglePause()
+        end,
+        onSettings = function()
+            hud_:showSettings()
+        end,
+        onToggleSound = function()
+            Settings.toggleSound(settings_)
+            ApplySettings()
+        end,
+        onToggleAutoClean = function()
+            Settings.toggleAutoClean(settings_)
+            ApplySettings()
+        end,
+        onCycleFont = function()
+            Settings.cycleCandidateFont(settings_)
+            ApplySettings()
+        end,
+        onCycleLimit = function()
+            Settings.cycleMistakeLimit(settings_)
+            ApplySettings()
+        end,
+        onRetry = function()
             StartNewGame(pendingDifficulty_)
         end,
     }
 
     -- 棋盘容器：占满顶栏与键盘之间的剩余空间，实际边长由 FitBoard 按空间算出
+    -- 棋盘与其下方的成绩条作为一个整体垂直居中，避免两者被拉开
     boardArea_ = UI.Panel {
         width = "100%",
         flexGrow = 1,
         flexBasis = 0,
+        flexDirection = "column",
         alignItems = "center",
         justifyContent = "center",
-        children = { boardView_.root },
+        gap = 10,
+        children = { boardView_.root, hud_.statsBar },
     }
 
     root_ = UI.Panel {
@@ -227,6 +287,9 @@ function BuildUI()
             },
             hud_.overlay,
             hud_.confirmOverlay,
+            hud_.pauseOverlay,
+            hud_.settingsOverlay,
+            hud_.failOverlay,
             hud_.toastPanel,
         },
     }
@@ -239,7 +302,90 @@ function RefreshAll()
     boardView_:refresh(board_)
     keypad_:update(board_)
     hud_:update(board_)
+    RefreshStatsBar()
     saveDirty_ = true
+end
+
+--- 棋盘下方成绩条：连续打卡 · 累计通关 · 当前难度最佳
+function RefreshStatsBar()
+    if not hud_ then
+        return
+    end
+
+    local parts = {}
+    local streak = records_.daily and tonumber(records_.daily.streak) or 0
+    if streak and streak > 0 then
+        parts[#parts + 1] = "连续 " .. tostring(streak) .. " 天"
+    end
+    parts[#parts + 1] = "累计 " .. tostring(Records.clearedCount(records_)) .. " 局"
+
+    local best = records_.best[board_.difficulty]
+    if best and tonumber(best.time) then
+        -- 这里不能用后面才声明的局部函数 difficultyLabel（作用域取不到），就地查表
+        local label = board_.difficulty
+        for _, d in ipairs(Sudoku.DIFFICULTIES) do
+            if d.key == board_.difficulty then
+                label = d.label
+                break
+            end
+        end
+        parts[#parts + 1] = label .. "最佳 " .. HUD.fmtTime(best.time)
+    end
+
+    hud_:setStats(table.concat(parts, " · "))
+end
+
+--- 把设置应用到音效 / 棋盘 / 视图 / 弹层显示，并按需落盘
+---@param persist boolean|nil 传 false 时只应用不写档
+function ApplySettings(persist)
+    settings_ = Settings.sanitize(settings_)
+
+    Sfx.setEnabled(settings_.sound)
+    if settings_.sound then
+        Sfx.init()
+    end
+
+    if board_ then
+        board_.autoCleanNotes = settings_.autoClean
+        board_:setMistakeLimit(settings_.mistakeLimit)
+    end
+    if boardView_ then
+        boardView_:setCandidateFont(settings_.candidateFont)
+    end
+    if hud_ then
+        hud_:setSettingsView {
+            sound = settings_.sound,
+            autoClean = settings_.autoClean,
+            fontText = tostring(settings_.candidateFont),
+            limitText = Settings.limitLabel(settings_.mistakeLimit),
+        }
+    end
+
+    if persist ~= false then
+        records_.settings = settings_
+        Storage.saveStats(records_)
+    end
+end
+
+--- 统一的落子入口：填数 + 音效 + 反馈动画 + 刷新
+---@param n integer 1..9
+function InputDigit(n)
+    if hud_ and hud_:isModalOpen() then
+        return
+    end
+    local idx = board_.selected
+    board_:input(n)
+
+    local act = board_.lastAction
+    if act == "wrong" then
+        boardView_:flash(idx, "error")
+        Sfx.play("error")
+    elseif act == "place" then
+        boardView_:flash(idx, "place")
+        Sfx.play("place")
+    end
+
+    RefreshAll()
 end
 
 -- ============================================================================
@@ -265,8 +411,15 @@ function FitBoard()
             return
         end
 
+        -- 棋盘容器里还有成绩条，算边长时要把它的高度预留出来，否则会顶到键盘
+        local reserve = CONFIG.StatsReserve
+        local availH = h - reserve
+        if not isUsableLength(availH) then
+            availH = h
+        end
+
         -- 正方形：取可用宽高的较小值，再受主题上限约束
-        local size = math.floor(math.min(w, h, Theme.SIZE.boardMax))
+        local size = math.floor(math.min(w, availH, Theme.SIZE.boardMax))
         if not isUsableLength(size) or size < 80 then
             return -- 空间过小时保持默认布局，避免把棋盘压没
         end
@@ -347,10 +500,86 @@ function RequestNewGame()
     StartNewGame(pendingDifficulty_)
 end
 
+--- 每日一题入口：同一天固定同一题、同一难度
+function StartDaily()
+    local key = Daily.today()
+    if not key then
+        hud_:toast("当前环境拿不到日期，每日一题暂不可用", 3)
+        return
+    end
+
+    -- 已经在做今天的每日题：不重开，避免手快冲掉进度
+    if board_.dailyKey == key and HasProgress() then
+        hud_:toast("今天的每日一题正在进行中", 2.5)
+        return
+    end
+
+    if HasProgress() then
+        pendingDaily_ = true
+        hud_:showConfirm("将开始今天的每日一题，当前这局（" .. board_:timeText() .. "）的进度会被放弃。")
+        return
+    end
+
+    BeginDaily(key)
+end
+
+---@param key string "YYYY-MM-DD"
+function BeginDaily(key)
+    local difficulty = Daily.difficultyFor(key)
+    pendingDifficulty_ = difficulty
+    board_:reset(difficulty, { daily = key })
+    ApplySettings(false)
+    failShown_ = false
+    hud_:hideFail()
+
+    resultShown_ = false
+    saveDirty_ = true
+    autosaveTimer_ = 0
+
+    hud_:setPaused(false, board_:timeText())
+    hud_:hideResult()
+    hud_:hideConfirm()
+    hud_:setDifficulty(pendingDifficulty_)
+    hud_:setPendingMismatch(false)
+    RefreshDailyButton()
+    RefreshAll()
+
+    if Daily.doneToday(records_.daily, key) then
+        hud_:toast("今天的每日已打卡，这局不计入连续天数", 3.5)
+    else
+        hud_:toast("每日一题 · 今天难度「" .. difficultyLabel(difficulty) .. "」", 3)
+    end
+    print("=== 每日一题：" .. key .. "，难度 " .. difficulty
+        .. "，空格 " .. board_:emptyCount() .. " ===")
+end
+
+--- 每日入口按钮：显示今天是否已打卡、连续天数
+function RefreshDailyButton()
+    local key = Daily.today()
+    local daily = records_.daily
+    local streak = (type(daily) == "table" and tonumber(daily.streak)) or 0
+    hud_:setDaily(key, streak, Daily.doneToday(daily, key))
+end
+
+--- 暂停 / 继续
+function TogglePause()
+    if board_.solved then
+        return
+    end
+    if not board_.started then
+        hud_:toast("先点一格开始计时，再暂停", 2)
+        return
+    end
+    local paused = board_:togglePause()
+    hud_:setPaused(paused, board_:timeText())
+end
+
 ---@param difficulty string
 function StartNewGame(difficulty)
+    pendingDaily_ = false
     pendingDifficulty_ = difficulty or pendingDifficulty_
     board_:reset(pendingDifficulty_)
+    hud_:setPaused(false, board_:timeText())
     resultShown_ = false
     saveDirty_ = true
     autosaveTimer_ = 0
@@ -383,7 +612,10 @@ end
 function HandleUpdate(eventType, eventData)
     local dt = eventData["TimeStep"]:GetFloat()
 
+
     board_:tick(dt)
+    boardView_:update(dt)
+    Sfx.tick(dt)
     hud_:update(board_, dt)
 
     -- 布局自适应：窗口尺寸变了（转屏 / 拖动窗口）就重算棋盘边长
@@ -401,21 +633,50 @@ function HandleUpdate(eventType, eventData)
         end
     end
 
+    -- 错误次数用尽：本局结束（设置里可关闭上限）
+    if board_.failed and not failShown_ then
+        failShown_ = true
+        Sfx.play("fail")
+        hud_:showFail(board_)
+        saveDirty_ = false
+        Storage.clearProgress() -- 失败局不再续，避免下次进来卡在死局
+        print("=== 本局失败：错误 " .. board_.mistakes .. " 次，用时 " .. board_:timeText() .. " ===")
+    end
+
     if board_.solved and not resultShown_ then
         resultShown_ = true
         boardView_:markSolved()
 
-        -- 成绩记录：用时更短才刷新，记录该局的错误次数
-        local isRecord, prevBest = Records.submit(records_, board_.difficulty, board_.elapsed, board_.mistakes)
-        if isRecord then
-            Storage.saveStats(records_)
+        local isRecord, prevBest = false, nil
+        local extra = ""
+
+        Records.markCleared(records_)
+
+        if board_.dailyKey then
+            -- 每日一题：计入连续打卡，不参与各档最佳（避免一次简单局刷掉记录）
+            local streak, firstToday = Records.markDaily(records_, board_.dailyKey)
+            extra = (firstToday and "每日一题完成 · 连续 " or "今日已打卡 · 连续 ")
+                .. tostring(streak) .. " 天"
+            RefreshDailyButton()
+            RefreshStatsBar()
+        else
+            -- 普通局：用时更短才刷新，记录该局的错误次数
+            isRecord, prevBest = Records.submit(records_, board_.difficulty, board_.elapsed, board_.mistakes)
+            RefreshStatsBar()
         end
 
-        hud_:showResult(board_, { isRecord = isRecord, prevBest = prevBest })
+        Storage.saveStats(records_)
+
+        extra = extra .. (extra ~= "" and " · " or "")
+            .. "累计通关 " .. tostring(Records.clearedCount(records_)) .. " 局"
+
+        Sfx.play("win")
+        hud_:showResult(board_, { isRecord = isRecord, prevBest = prevBest, extra = extra })
         saveDirty_ = false
         Storage.clearProgress() -- 进度清掉，成绩保留
         print("=== 通关：" .. board_:timeText() .. "，错误 " .. board_.mistakes
-            .. " 次" .. (isRecord and "，刷新记录" or "") .. " ===")
+            .. " 次" .. (isRecord and "，刷新记录" or "")
+            .. (board_.dailyKey and "，每日 " .. board_.dailyKey or "") .. " ===")
     end
 end
 
@@ -434,16 +695,19 @@ local DIGIT_KEYS = {
 ---@param eventType string
 ---@param eventData KeyDownEventData
 function HandleKeyDown(eventType, eventData)
+    local key = eventData["Key"]:GetInt()
+
     if hud_ and hud_:isModalOpen() then
+        -- 暂停遮罩下仍然允许键盘继续，避免只能用鼠标/手指
+        if board_ and board_:isPaused() and (key == KEY_P or key == KEY_SPACE) then
+            TogglePause()
+        end
         return
     end
 
-    local key = eventData["Key"]:GetInt()
-
     local digit = DIGIT_KEYS[key]
     if digit then
-        board_:input(digit)
-        RefreshAll()
+        InputDigit(digit)
         return
     end
 
@@ -465,6 +729,12 @@ function HandleKeyDown(eventType, eventData)
         board_:undo()
     elseif key == KEY_R then
         RequestNewGame()
+        return
+    elseif key == KEY_P then
+        TogglePause()
+        return
+    elseif key == KEY_D then
+        StartDaily()
         return
     else
         return

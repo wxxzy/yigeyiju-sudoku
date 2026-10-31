@@ -1,5 +1,5 @@
 -- ============================================================================
--- HUD：顶部状态条（难度 / 用时 / 错误）+ 通关覆盖层 + 确认弹层
+-- HUD：顶部状态条（难度 / 每日 / 用时 / 错误 / 暂停 / 新局）+ 通关 / 确认 / 暂停覆盖层
 --   · 难度按钮只切换「待开局难度」，不直接开新局（避免误触冲掉进度）
 --   · 开新局由 main 判断是否有进度，需要时走 showConfirm 二次确认
 -- ============================================================================
@@ -32,6 +32,8 @@ local function fmtTime(sec)
     return pad2(math.floor(sec / 60)) .. ":" .. pad2(sec % 60)
 end
 
+HUD.fmtTime = fmtTime
+
 local function difficultyLabel(key)
     for _, d in ipairs(Sudoku.DIFFICULTIES) do
         if d.key == key then
@@ -62,14 +64,14 @@ function HUD.new(handlers)
 
     self.timerLabel = UI.Label {
         text = "用时 00:00",
-        fontSize = F.small,
-        fontColor = C.textSecondary,
+        fontSize = F.body,
+        fontColor = C.textPrimary,
     }
 
     self.mistakesLabel = UI.Label {
         text = "错误 0",
         fontSize = F.small,
-        fontColor = C.textSecondary,
+        fontColor = C.textMuted,
     }
 
     self.newGameButton = UI.Button {
@@ -87,19 +89,106 @@ function HUD.new(handlers)
         end,
     }
 
-    self.root = UI.Panel {
+    self.dailyButton = UI.Button {
+        text = "每日",
+        height = 32,
+        fontSize = F.small,
+        backgroundColor = C.surface,
+        hoverBackgroundColor = C.accentSoft,
+        pressedBackgroundColor = C.accentSoft,
+        textColor = C.textPrimary,
+        borderRadius = 16,
+        paddingHorizontal = 10,
+        onClick = function()
+            handlers.onDaily()
+        end,
+    }
+
+    self.pauseButton = UI.Button {
+        text = "暂停",
+        height = 28,
+        fontSize = F.small,
+        backgroundColor = { 0, 0, 0, 0 },
+        hoverBackgroundColor = C.accentSoft,
+        pressedBackgroundColor = C.accentSoft,
+        textColor = C.textMuted,
+        borderRadius = 14,
+        paddingHorizontal = 8,
+        onClick = function()
+            handlers.onPause()
+        end,
+    }
+
+    -- 上排：操作（难度 / 每日 / 新局）
+    self.primaryRow = UI.Panel {
         width = "100%",
-        height = S.hudHeight,
         flexDirection = "row",
         alignItems = "center",
-        gap = 10,
+        gap = 8,
         children = {
             self.difficultyButton,
+            self.dailyButton,
             UI.Spacer(),
-            self.timerLabel,
-            self.mistakesLabel,
             self.newGameButton,
         },
+    }
+
+    self.settingsButton = UI.Button {
+        text = "设置",
+        height = 28,
+        fontSize = F.small,
+        backgroundColor = { 0, 0, 0, 0 },
+        hoverBackgroundColor = C.accentSoft,
+        pressedBackgroundColor = C.accentSoft,
+        textColor = C.textMuted,
+        borderRadius = 14,
+        paddingHorizontal = 8,
+        onClick = function()
+            handlers.onSettings()
+        end,
+    }
+
+    -- 下排：状态（用时 / 错误）与暂停
+    self.statusRow = UI.Panel {
+        width = "100%",
+        flexDirection = "row",
+        alignItems = "center",
+        gap = 8,
+        children = {
+            self.timerLabel,
+            UI.Label { text = "·", fontSize = F.small, fontColor = C.textMuted },
+            self.mistakesLabel,
+            UI.Spacer(),
+            self.settingsButton,
+            self.pauseButton,
+        },
+    }
+
+    self.root = UI.Panel {
+        width = "100%",
+        flexDirection = "column",
+        gap = 4,
+        children = {
+            self.primaryRow,
+            self.statusRow,
+        },
+    }
+
+    -- 成绩条：连续打卡 / 累计通关 / 当前难度最佳
+    self.statsLabel = UI.Label {
+        text = "",
+        fontSize = F.tiny,
+        fontColor = C.textMuted,
+        textAlign = "center",
+        width = "100%",
+    }
+
+    self.statsBar = UI.Panel {
+        width = "100%",
+        height = 22,
+        alignItems = "center",
+        justifyContent = "center",
+        children = { self.statsLabel },
     }
 
     -- ---------------------------------------------------------------------
@@ -108,6 +197,7 @@ function HUD.new(handlers)
     self.resultTimeLabel = UI.Label { text = "", fontSize = F.body, fontColor = C.textSecondary }
     self.resultDetailLabel = UI.Label { text = "", fontSize = F.small, fontColor = C.textMuted }
     self.recordLabel = UI.Label { text = "", fontSize = F.small, fontColor = C.accent }
+    self.extraLabel = UI.Label { text = "", fontSize = F.tiny, fontColor = C.textMuted }
 
     self.overlay = UI.Panel {
         position = "absolute",
@@ -136,6 +226,7 @@ function HUD.new(handlers)
                     self.resultTimeLabel,
                     self.resultDetailLabel,
                     self.recordLabel,
+                    self.extraLabel,
                     UI.Panel { height = 6 },
                     UI.Button {
                         text = "再来一局",
@@ -143,6 +234,10 @@ function HUD.new(handlers)
                         height = 44,
                         fontSize = F.body,
                         variant = "primary",
+                        backgroundColor = C.accent,
+                        hoverBackgroundColor = C.accentPressed,
+                        pressedBackgroundColor = C.accentPressed,
+                        textColor = C.surface,
                         onClick = function()
                             handlers.onNewGame()
                         end,
@@ -228,12 +323,226 @@ function HUD.new(handlers)
                                 height = 40,
                                 fontSize = F.small,
                                 variant = "primary",
+                        backgroundColor = C.accent,
+                        hoverBackgroundColor = C.accentPressed,
+                        pressedBackgroundColor = C.accentPressed,
+                        textColor = C.surface,
                                 onClick = function()
                                     self.confirmOverlay:SetVisible(false)
                                     handlers.onConfirmNewGame()
                                 end,
                             },
                         },
+                    },
+                },
+            },
+        },
+    }
+
+    -- ---------------------------------------------------------------------
+    -- 设置弹层
+    -- ---------------------------------------------------------------------
+    local function settingRow(labelText, button)
+        return UI.Panel {
+            width = "100%",
+            flexDirection = "row",
+            alignItems = "center",
+            gap = 10,
+            children = {
+                UI.Label {
+                    text = labelText,
+                    flex = 1,
+                    fontSize = F.small,
+                    fontColor = C.textSecondary,
+                },
+                button,
+            },
+        }
+    end
+
+    local function toggleButton(text, onClick)
+        return UI.Button {
+            text = text,
+            width = 84,
+            height = 32,
+            fontSize = F.small,
+            backgroundColor = C.surfaceMuted,
+            hoverBackgroundColor = C.accentSoft,
+            pressedBackgroundColor = C.accentSoft,
+            textColor = C.textPrimary,
+            borderRadius = 8,
+            onClick = onClick,
+        }
+    end
+
+    self.btnSound = toggleButton("开", function()
+        handlers.onToggleSound()
+    end)
+    self.btnAutoClean = toggleButton("开", function()
+        handlers.onToggleAutoClean()
+    end)
+    self.btnFont = toggleButton("11", function()
+        handlers.onCycleFont()
+    end)
+    self.btnLimit = toggleButton("不限", function()
+        handlers.onCycleLimit()
+    end)
+
+    self.settingsOverlay = UI.Panel {
+        position = "absolute",
+        top = 0,
+        left = 0,
+        right = 0,
+        bottom = 0,
+        visible = false,
+        alignItems = "center",
+        justifyContent = "center",
+        backgroundColor = { 15, 23, 42, 200 },
+        children = {
+            UI.Panel {
+                width = 300,
+                padding = 20,
+                gap = 12,
+                alignItems = "center",
+                backgroundColor = C.surface,
+                borderRadius = 16,
+                children = {
+                    UI.Label { text = "设置", fontSize = 18, fontColor = C.textPrimary },
+                    settingRow("音效", self.btnSound),
+                    settingRow("自动清笔记", self.btnAutoClean),
+                    settingRow("候选字号", self.btnFont),
+                    settingRow("错误上限", self.btnLimit),
+                    UI.Button {
+                        text = "关闭",
+                        width = "100%",
+                        height = 40,
+                        fontSize = F.small,
+                        backgroundColor = C.surfaceMuted,
+                        hoverBackgroundColor = C.accentSoft,
+                        pressedBackgroundColor = C.accentSoft,
+                        textColor = C.textSecondary,
+                        borderRadius = 8,
+                        onClick = function()
+                            self.settingsOverlay:SetVisible(false)
+                        end,
+                    },
+                },
+            },
+        },
+    }
+
+    -- ---------------------------------------------------------------------
+    -- 失败弹层（错误次数用尽）
+    -- ---------------------------------------------------------------------
+    self.failDetailLabel = UI.Label {
+        text = "",
+        fontSize = F.small,
+        fontColor = C.textMuted,
+        textAlign = "center",
+        whiteSpace = "normal",
+        width = "100%",
+    }
+
+    self.failOverlay = UI.Panel {
+        position = "absolute",
+        top = 0,
+        left = 0,
+        right = 0,
+        bottom = 0,
+        visible = false,
+        alignItems = "center",
+        justifyContent = "center",
+        backgroundColor = { 15, 23, 42, 200 },
+        children = {
+            UI.Panel {
+                width = 280,
+                padding = 22,
+                gap = 10,
+                alignItems = "center",
+                backgroundColor = C.surface,
+                borderRadius = 16,
+                children = {
+                    UI.Label { text = "本局结束", fontSize = 20, fontColor = C.textPrimary },
+                    self.failDetailLabel,
+                    UI.Panel { height = 4 },
+                    UI.Button {
+                        text = "再来一局",
+                        width = "100%",
+                        height = 42,
+                        fontSize = F.body,
+                        variant = "primary",
+                        backgroundColor = C.accent,
+                        hoverBackgroundColor = C.accentPressed,
+                        pressedBackgroundColor = C.accentPressed,
+                        textColor = C.surface,
+                        onClick = function()
+                            self.failOverlay:SetVisible(false)
+                            handlers.onRetry()
+                        end,
+                    },
+                    UI.Button {
+                        text = "先歇会",
+                        width = "100%",
+                        height = 36,
+                        fontSize = F.small,
+                        backgroundColor = C.surfaceMuted,
+                        hoverBackgroundColor = C.accentSoft,
+                        pressedBackgroundColor = C.accentSoft,
+                        textColor = C.textSecondary,
+                        borderRadius = 8,
+                        onClick = function()
+                            self.failOverlay:SetVisible(false)
+                        end,
+                    },
+                },
+            },
+        },
+    }
+
+    -- ---------------------------------------------------------------------
+    -- 暂停遮罩：挡住棋盘（防止暂停后还能继续看盘面推演），点「继续」恢复
+    -- ---------------------------------------------------------------------
+    self.pauseTimeLabel = UI.Label { text = "", fontSize = F.small, fontColor = C.textMuted }
+
+    self.pauseOverlay = UI.Panel {
+        position = "absolute",
+        top = 0,
+        left = 0,
+        right = 0,
+        bottom = 0,
+        visible = false,
+        alignItems = "center",
+        justifyContent = "center",
+        backgroundColor = { 15, 23, 42, 235 },
+        children = {
+            UI.Panel {
+                width = 240,
+                padding = 22,
+                gap = 10,
+                alignItems = "center",
+                backgroundColor = C.surface,
+                borderRadius = 16,
+                children = {
+                    UI.Label { text = "已暂停", fontSize = 20, fontColor = C.textPrimary },
+                    self.pauseTimeLabel,
+                    UI.Label {
+                        text = "暂停期间不计时",
+                        fontSize = F.tiny,
+                        fontColor = C.textMuted,
+                    },
+                    UI.Button {
+                        text = "继续",
+                        width = "100%",
+                        height = 42,
+                        fontSize = F.body,
+                        variant = "primary",
+                        backgroundColor = C.accent,
+                        hoverBackgroundColor = C.accentPressed,
+                        pressedBackgroundColor = C.accentPressed,
+                        textColor = C.surface,
+                        onClick = function()
+                            handlers.onResume()
+                        end,
                     },
                 },
             },
@@ -296,6 +605,81 @@ function HUD:setPendingMismatch(mismatch)
     }
 end
 
+--- 每日一题入口的状态：今天是否已完成、连续多少天
+---@param dateKey string|nil
+---@param streak integer
+---@param doneToday boolean
+function HUD:setDaily(dateKey, streak, doneToday)
+    self.dailyKey_ = dateKey
+    self.dailyStreak_ = streak or 0
+    self.dailyDone_ = doneToday == true
+
+    if doneToday then
+        self.dailyButton:SetText("每日 ✓")
+        self.dailyButton:SetStyle { backgroundColor = C.accentSoft, textColor = C.accent }
+    elseif (streak or 0) > 0 then
+        self.dailyButton:SetText("每日 ×" .. tostring(streak))
+        self.dailyButton:SetStyle { backgroundColor = C.surface, textColor = C.textPrimary }
+    else
+        self.dailyButton:SetText("每日")
+        self.dailyButton:SetStyle { backgroundColor = C.surface, textColor = C.textPrimary }
+    end
+end
+
+--- 棋盘下方的成绩条（空字符串时隐藏）
+---@param text string
+function HUD:setStats(text)
+    local t = text or ""
+    if t == self.statsText_ then
+        return
+    end
+    self.statsText_ = t
+    self.statsLabel:SetText(t)
+    self.statsBar:SetVisible(t ~= "")
+end
+
+--- 刷新设置弹层上的按钮文案（HUD 不关心业务取值，只负责显示）
+---@param view table { sound=boolean, autoClean=boolean, fontText=string, limitText=string }
+function HUD:setSettingsView(view)
+    view = view or {}
+    self.btnSound:SetText(view.sound and "开" or "关")
+    self.btnAutoClean:SetText(view.autoClean and "开" or "关")
+    self.btnFont:SetText(tostring(view.fontText or "11"))
+    self.btnLimit:SetText(tostring(view.limitText or "不限"))
+end
+
+function HUD:showSettings()
+    self.settingsOverlay:SetVisible(true)
+end
+
+function HUD:hideSettings()
+    self.settingsOverlay:SetVisible(false)
+end
+
+--- 失败结算（错误次数用尽）
+---@param board table
+function HUD:showFail(board)
+    self.failDetailLabel:SetText(
+        difficultyLabel(board.difficulty)
+            .. " · 坚持了 " .. board:timeText()
+            .. " · 错误 " .. board.mistakes .. " 次"
+    )
+    self.failOverlay:SetVisible(true)
+end
+
+function HUD:hideFail()
+    self.failOverlay:SetVisible(false)
+end
+
+--- 暂停态同步：遮罩显示 + 按钮文案
+---@param paused boolean
+---@param timeText string
+function HUD:setPaused(paused, timeText)
+    self.pauseButton:SetText(paused and "继续" or "暂停")
+    self.pauseTimeLabel:SetText("用时 " .. tostring(timeText or "00:00"))
+    self.pauseOverlay:SetVisible(paused and true or false)
+end
+
 --- 同步实时状态（只更新计时与错误数，不复写难度）
 ---@param board table
 ---@param dt number|nil 帧间隔，用于轻提示倒计时
@@ -306,6 +690,10 @@ function HUD:update(board, dt)
         self.timerLabel:SetText("用时 " .. timeText)
     end
     self.mistakesLabel:SetText("错误 " .. board.mistakes)
+
+    if self.pauseOverlay:IsVisible() then
+        self.pauseTimeLabel:SetText("用时 " .. timeText)
+    end
 
     if self.toastTimer_ > 0 then
         self.toastTimer_ = self.toastTimer_ - (dt or 0)
@@ -345,6 +733,15 @@ function HUD:showResult(board, ctx)
         self.recordLabel:SetVisible(false)
     end
 
+    local extra = ctx.extra
+    if type(extra) == "string" and extra ~= "" then
+        self.extraLabel:SetText(extra)
+        self.extraLabel:SetVisible(true)
+    else
+        self.extraLabel:SetText("")
+        self.extraLabel:SetVisible(false)
+    end
+
     self.overlay:SetVisible(true)
 end
 
@@ -365,7 +762,11 @@ end
 
 --- 覆盖层是否正在显示（用于挡住背后的键盘操作）
 function HUD:isModalOpen()
-    return self.overlay:IsVisible() or self.confirmOverlay:IsVisible()
+    return self.overlay:IsVisible()
+        or self.confirmOverlay:IsVisible()
+        or self.pauseOverlay:IsVisible()
+        or self.settingsOverlay:IsVisible()
+        or self.failOverlay:IsVisible()
 end
 
 return HUD

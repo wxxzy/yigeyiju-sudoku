@@ -4,7 +4,7 @@
 local Sudoku = require "game.sudoku"
 local Rating = require "game.rating"
 
-local PER_TIER = 8
+local PER_TIER = 20
 
 -- 每档的挖洞下限 + 验收条件
 local TIERS = {
@@ -31,7 +31,7 @@ function Start()
         local got, attempts = {}, 0
         local givensSum = 0
 
-        while #got < PER_TIER and attempts < 900 do
+        while #got < PER_TIER and attempts < 1800 do
             attempts = attempts + 1
             local puzzle, _solution, givens = Sudoku.generateRaw(tier.floor)
             if givens <= tier.maxGivens then

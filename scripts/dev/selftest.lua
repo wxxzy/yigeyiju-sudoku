@@ -7,6 +7,10 @@
 
 local Sudoku = require "game.sudoku"
 local Board = require "game.board"
+local Daily = require "game.daily"
+local Records = require "game.records"
+local PuzzleBank = require "game.puzzle_bank"
+local Settings = require "game.settings"
 
 local failures = 0
 local checks = 0
@@ -280,6 +284,283 @@ local function run()
                 end
                 check(not conflict, "第" .. i .. "格候选 " .. v .. " 与同行列宫冲突")
             end
+        end
+    end
+
+    -- 9) 自动清理笔记：填入正确数字后清掉同行列宫的笔记，且能整体撤销
+    do
+        local b = Board.new("easy")
+        local idx, n
+        for i = 1, 81 do
+            if b.values[i] == 0 then
+                idx = i
+                n = b.solution[i]
+                break
+            end
+        end
+        local peer
+        for i = 1, 81 do
+            if i ~= idx and b.values[i] == 0 and Sudoku.isPeer(idx, i) then
+                peer = i
+                break
+            end
+        end
+
+        if idx and peer and n then
+            b:select(peer)
+            b:toggleNotesMode()
+            b:input(n)
+            b:toggleNotesMode()
+            check(b.notes[peer][n] == true, "笔记没有写进去，后续校验无意义")
+
+            b:select(idx)
+            b:input(n)
+            check(b.values[idx] == n, "正确数字没有填上")
+            check(b.notes[peer][n] == nil, "填入正确数字后没有清掉同行列宫的笔记")
+
+            b:undo()
+            check(b.values[idx] == 0, "撤销没有还原填的数")
+            check(b.notes[peer][n] == true, "撤销没有恢复被清掉的笔记")
+        else
+            check(false, "没找到可用于清笔记校验的空格")
+        end
+
+        -- 关掉开关时不应清理
+        local b2 = Board.new("easy")
+        b2.autoCleanNotes = false
+        local i2, n2, p2
+        for i = 1, 81 do
+            if b2.values[i] == 0 then
+                i2 = i
+                n2 = b2.solution[i]
+                break
+            end
+        end
+        for i = 1, 81 do
+            if i ~= i2 and b2.values[i] == 0 and Sudoku.isPeer(i2, i) then
+                p2 = i
+                break
+            end
+        end
+        if i2 and p2 and n2 then
+            b2:select(p2)
+            b2:toggleNotesMode()
+            b2:input(n2)
+            b2:toggleNotesMode()
+            b2:select(i2)
+            b2:input(n2)
+            check(b2.notes[p2][n2] == true, "关掉自动清笔记后仍然被清掉了")
+        end
+    end
+
+    -- 10) 暂停：暂停期间不计时，恢复后继续；未开始不能暂停；通关后不能暂停
+    do
+        local b = Board.new("easy")
+        check(b:togglePause() == false, "还没开始就允许暂停")
+        b.started = true
+        b:tick(1)
+        check(b.elapsed >= 0.9, "正常计时异常")
+
+        check(b:togglePause() == true, "暂停失败")
+        local frozen = b.elapsed
+        b:tick(5)
+        check(math.abs(b.elapsed - frozen) < 0.0001, "暂停期间仍在计时")
+        check(b:isPaused() == true, "暂停状态没置上")
+
+        check(b:togglePause() == false, "恢复失败")
+        b:tick(1)
+        check(b.elapsed > frozen + 0.9, "恢复后没有继续计时")
+
+        b.solved = true
+        check(b:togglePause() == false, "通关后仍允许暂停")
+    end
+
+    -- 11) 每日一题：日期解析、确定性选题、难度轮换
+    do
+        local key = Daily.today()
+        check(type(key) == "string" and #key == 10, "拿不到今天的日期键")
+
+        check(Daily.dayTime("2026-10-31") ~= nil, "合法日期解析失败")
+        check(Daily.dayTime("2026/10/31") == nil, "非法日期没被拒绝")
+        check(Daily.dayTime(nil) == nil, "nil 日期没被拒绝")
+
+        check(Daily.isPreviousDay("2026-10-30", "2026-10-31") == true, "相邻两天识别失败")
+        check(Daily.isPreviousDay("2026-10-29", "2026-10-31") == false, "隔一天误判为相邻")
+        check(Daily.isPreviousDay("2026-10-31", "2026-10-31") == false, "同一天误判为前一天")
+
+        check(Daily.indexFor("2026-10-31", 8) == Daily.indexFor("2026-10-31", 8), "同一天选题不稳定")
+        local i1 = Daily.indexFor("2026-10-31", 8)
+        check(i1 >= 1 and i1 <= 8, "选题下标越界")
+
+        local d1 = Daily.difficultyFor("2026-10-31")
+        check(type(d1) == "string" and d1 ~= "", "取不到当日难度")
+
+        local count = PuzzleBank.count("easy")
+        check(count > 0, "题库为空，每日一题无题可选")
+
+        local bd = Board.new("easy")
+        bd:reset("easy", { daily = "2026-10-31" })
+        check(bd.dailyKey == "2026-10-31", "每日标记没有记上")
+
+        local expect = PuzzleBank.pickAt("easy", Daily.indexFor("2026-10-31", count))
+        local same = type(expect) == "table"
+        if same then
+            for i = 1, 81 do
+                if bd.puzzle[i] ~= expect[i] then
+                    same = false
+                    break
+                end
+            end
+        end
+        check(same, "每日题与按日期算出的题不一致")
+
+        local bd2 = Board.new("normal")
+        bd2:reset("easy", { daily = "2026-10-31" })
+        local samePuzzle = true
+        for i = 1, 81 do
+            if bd.puzzle[i] ~= bd2.puzzle[i] then
+                samePuzzle = false
+                break
+            end
+        end
+        check(samePuzzle, "同一天两次开局拿到不同题")
+
+        -- 每日标记要能存档 / 恢复
+        local data = bd:serialize()
+        check(data.daily == "2026-10-31", "每日标记没进存档")
+        local bd3 = Board.new("easy")
+        check(bd3:restore(data) == true, "每日存档恢复失败")
+        check(bd3.dailyKey == "2026-10-31", "恢复后丢了每日标记")
+
+        -- 普通局不该带每日标记
+        local bp = Board.new("easy")
+        bp:reset("easy")
+        check(bp.dailyKey == nil, "普通局被误标成每日题")
+    end
+
+    -- 12) 连续打卡与累计通关
+    do
+        local st = Daily.newState()
+        local s1, f1 = Daily.markCleared(st, "2026-10-29")
+        check(s1 == 1 and f1 == true, "首日打卡没有从 1 开始")
+        local s2, f2 = Daily.markCleared(st, "2026-10-30")
+        check(s2 == 2 and f2 == true, "连续第二天没有 +1")
+        local s3 = Daily.markCleared(st, "2026-10-30")
+        check(s3 == 2, "同一天重复完成仍然加天数")
+        local s4 = Daily.markCleared(st, "2026-11-02")
+        check(s4 == 1, "中断后没有重置为 1")
+        check(st.cleared == 4, "每日完成次数计数不对")
+
+        local rec = Records.new()
+        check(Records.clearedCount(rec) == 0, "新记录通关数不是 0")
+        Records.markCleared(rec)
+        Records.markCleared(rec)
+        check(Records.clearedCount(rec) == 2, "累计通关数不对")
+
+        -- 兼容 v1 存档（只有 best）
+        local legacy = Records.sanitize({ v = 1, best = { hard = { time = 100, mistakes = 2 } } })
+        check(legacy.best.hard and legacy.best.hard.time == 100, "v1 存档成绩没有读回来")
+        check(Records.clearedCount(legacy) == 0, "v1 存档补默认通关数失败")
+        check(legacy.daily.streak == 0, "v1 存档补默认每日状态失败")
+
+        -- 脏数据清洗
+        local dirty = Records.sanitize({ cleared = -5, daily = { streak = "x", last = 123, cleared = -1 } })
+        check(Records.clearedCount(dirty) == 0, "负数通关数没被清掉")
+        check(dirty.daily.streak == 0, "非法连续天数没被清掉")
+        check(dirty.daily.last == "", "非法日期没被清掉")
+        check(dirty.daily.cleared == 0, "负数每日次数没被清掉")
+    end
+
+    -- 13) 设置：默认值、非法值回落、循环切换、随存档往返
+    do
+        local st = Settings.sanitize({ sound = false, autoClean = false, candidateFont = 99, mistakeLimit = -1 })
+        check(st.sound == false, "音效设置没有读回")
+        check(st.autoClean == false, "自动清笔记设置没有读回")
+        check(st.candidateFont == 11, "非法候选字号没有回落到默认 11")
+        check(st.mistakeLimit == 0, "非法错误上限没有回落到默认 0")
+
+        local empty = Settings.sanitize(nil)
+        check(empty.sound == true and empty.autoClean == true, "空设置没有给默认值")
+        check(empty.candidateFont == 11 and empty.mistakeLimit == 0, "空设置默认值不对")
+
+        local s2 = Settings.new()
+        check(Settings.cycleCandidateFont(s2) == 12, "字号循环 11→12 失败")
+        check(Settings.cycleCandidateFont(s2) == 10, "字号循环 12→10 失败")
+        check(Settings.cycleCandidateFont(s2) == 11, "字号循环 10→11 失败")
+
+        local s3 = Settings.new()
+        check(Settings.cycleMistakeLimit(s3) == 3, "上限循环 0→3 失败")
+        check(Settings.cycleMistakeLimit(s3) == 5, "上限循环 3→5 失败")
+        check(Settings.cycleMistakeLimit(s3) == 0, "上限循环 5→0 失败")
+
+        check(Settings.limitLabel(0) == "不限", "不限文案不对")
+        check(Settings.limitLabel(5) == "5 次", "错误上限文案不对")
+
+        -- 设置随成绩存档往返（v3）
+        local rec = Records.sanitize({ v = 2, cleared = 3 })
+        check(type(rec.settings) == "table", "旧档没有补上设置字段")
+        check(rec.settings.sound == true, "旧档补的设置默认值不对")
+
+        local rec2 = Records.sanitize({ settings = { sound = false, autoClean = false, candidateFont = 12, mistakeLimit = 3 } })
+        check(rec2.settings.sound == false, "设置音效没有随存档读回")
+        check(rec2.settings.candidateFont == 12, "设置字号没有随存档读回")
+        check(rec2.settings.mistakeLimit == 3, "设置上限没有随存档读回")
+    end
+
+    -- 14) 错误上限：达到上限判负、失败后不可编辑、新局恢复
+    do
+        local b = Board.new("easy")
+        local idx, sol
+        for i = 1, 81 do
+            if b.values[i] == 0 then
+                idx = i
+                sol = b.solution[i]
+                break
+            end
+        end
+
+        check(idx ~= nil, "没找到空格，错误上限校验无意义")
+        if idx then
+            -- 收集 3 个与正确答案不同的数字
+            local wrongs = {}
+            for d = 1, 9 do
+                if d ~= sol and #wrongs < 3 then
+                    wrongs[#wrongs + 1] = d
+                end
+            end
+
+            b:setMistakeLimit(3)
+            check(b.mistakeLimit == 3, "错误上限没有设置成功")
+            b:select(idx)
+
+            b:input(wrongs[1])
+            check(b.mistakes == 1, "第一次填错没有计数")
+            check(b:isFailed() == false, "第一次填错就判负")
+
+            b:input(wrongs[2])
+            b:input(wrongs[3])
+            check(b.mistakes == 3, "错误次数累计不对")
+            check(b:isFailed() == true, "错误达到上限没有判负")
+            check(b:canEdit(idx) == false, "判负后仍然可以编辑")
+
+            -- 判负后不再计时
+            local frozen = b.elapsed
+            b:tick(2)
+            check(math.abs(b.elapsed - frozen) < 0.0001, "判负后仍在计时")
+
+            -- 新局要清掉失败态与错误数
+            b:reset("easy")
+            check(b:isFailed() == false, "新局没有清除失败态")
+            check(b.mistakes == 0, "新局没有清空错误数")
+
+            -- 不限时永远不判负
+            b:setMistakeLimit(0)
+            b:select(idx)
+            for _ = 1, 6 do
+                b:input(wrongs[1])
+                b:input(wrongs[2])
+            end
+            check(b:isFailed() == false, "不限错误上限时仍被判负")
         end
     end
 

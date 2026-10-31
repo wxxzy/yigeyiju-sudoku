@@ -6,6 +6,7 @@
 local Sudoku = require "game.sudoku"
 local Rating = require "game.rating"
 local PuzzleBank = require "game.puzzle_bank"
+local Daily = require "game.daily"
 
 local Board = {}
 Board.__index = Board
@@ -29,11 +30,19 @@ function Board.new(difficulty)
 end
 
 --- 开新局
-function Board:reset(difficulty)
+---@param difficulty string|nil
+---@param opts table|nil { daily = "YYYY-MM-DD" } 每日一题：按日期确定性选题
+function Board:reset(difficulty, opts)
     self.difficulty = difficulty or self.difficulty or "normal"
+    opts = opts or {}
+    self.dailyKey = opts.daily
 
     -- 优先从题库抽题（难度经过技巧校验）；题库缺档时退回实时生成
-    local puzzle = PuzzleBank.pick(self.difficulty)
+    local puzzle
+    if self.dailyKey then
+        puzzle = PuzzleBank.pickAt(self.difficulty, Daily.indexFor(self.dailyKey, PuzzleBank.count(self.difficulty)))
+    end
+    puzzle = puzzle or PuzzleBank.pick(self.difficulty)
     local solution = puzzle and Sudoku.solve(puzzle)
     if not puzzle or not solution then
         puzzle, solution = Sudoku.generate(self.difficulty)
@@ -64,6 +73,11 @@ function Board:reset(difficulty)
     self.showCandidates = (self.difficulty == "easy" or self.difficulty == "normal")
     self.hintIdx = nil
     self.hintReason = nil
+    self.paused = false
+    self.failed = false
+    self.mistakeLimit = 0 -- 0 = 不限；>0 时错误达到上限即本局失败
+    -- 填入正确数字时顺手清掉同行/列/宫里该数字的笔记（标准 QoL）
+    self.autoCleanNotes = true
 end
 
 function Board:isGiven(idx)
@@ -71,7 +85,18 @@ function Board:isGiven(idx)
 end
 
 function Board:canEdit(idx)
-    return idx ~= nil and not self:isGiven(idx) and not self.solved
+    return idx ~= nil and not self:isGiven(idx) and not self.solved and not self.failed
+end
+
+--- 设置错误上限（0 = 不限）
+function Board:setMistakeLimit(limit)
+    limit = math.max(0, math.floor(tonumber(limit) or 0))
+    self.mistakeLimit = limit
+end
+
+--- 本局是否已因错误次数用尽而结束
+function Board:isFailed()
+    return self.failed == true
 end
 
 function Board:select(idx)
@@ -98,14 +123,24 @@ end
 -- 撤销
 -- ---------------------------------------------------------------------------
 
-function Board:pushHistory(idx)
-    local snap = {
+--- 单个格子的当前状态
+function Board:cellSnapshot(idx)
+    return {
         idx = idx,
         value = self.values[idx],
         notes = copyNotes(self.notes[idx]),
         wrong = self.wrong[idx],
-        mistakes = self.mistakes,
     }
+end
+
+--- 记录一次改动；extra 是被这次操作连带改掉的其它格（如被清理的笔记）
+function Board:pushHistory(idx, extra)
+    local cells = { self:cellSnapshot(idx) }
+    for _, i in ipairs(extra or {}) do
+        cells[#cells + 1] = self:cellSnapshot(i)
+    end
+
+    local snap = { cells = cells, mistakes = self.mistakes }
     table.insert(self.history, snap)
     if #self.history > 100 then
         table.remove(self.history, 1)
@@ -113,18 +148,33 @@ function Board:pushHistory(idx)
     return snap
 end
 
+--- 同行/列/宫里带该数字笔记的格子
+function Board:notePeersOf(idx, n)
+    local list = {}
+    if not idx or not n then
+        return list
+    end
+    for i = 1, Sudoku.CELLS do
+        if i ~= idx and Sudoku.isPeer(idx, i) and self.notes[i] and self.notes[i][n] then
+            list[#list + 1] = i
+        end
+    end
+    return list
+end
+
 function Board:undo()
     local snap = table.remove(self.history)
-    if not snap then
+    if not snap or type(snap.cells) ~= "table" or #snap.cells == 0 then
         return false
     end
     self:clearHint()
-    local idx = snap.idx
-    self.values[idx] = snap.value
-    self.notes[idx] = snap.notes
-    self.wrong[idx] = snap.wrong
+    for _, cell in ipairs(snap.cells) do
+        self.values[cell.idx] = cell.value
+        self.notes[cell.idx] = cell.notes
+        self.wrong[cell.idx] = cell.wrong
+    end
     self.mistakes = snap.mistakes
-    self.selected = idx
+    self.selected = snap.cells[1].idx
     self.solved = false
     self.lastAction = "undo"
     return true
@@ -156,7 +206,15 @@ function Board:input(n)
         return true
     end
 
-    self:pushHistory(idx)
+    -- 先判断这次落子会不会顺带清掉同行/列/宫的笔记，把受影响的格子一起入栈，
+    -- 这样一次撤销能把「填数 + 清笔记」整体回滚
+    local willBeCorrect = (self.values[idx] ~= n) and (n == self.solution[idx])
+    local cleanList = {}
+    if willBeCorrect and self.autoCleanNotes then
+        cleanList = self:notePeersOf(idx, n)
+    end
+    self:pushHistory(idx, cleanList)
+
     if self.values[idx] == n then
         -- 同一格再按同一个数字 = 清除
         self.values[idx] = 0
@@ -168,10 +226,16 @@ function Board:input(n)
 
     self.values[idx] = n
     self.notes[idx] = {}
+    for _, i in ipairs(cleanList) do
+        self.notes[i][n] = nil
+    end
     local ok = (n == self.solution[idx])
     self.wrong[idx] = not ok
     if not ok then
         self.mistakes = self.mistakes + 1
+        if self.mistakeLimit and self.mistakeLimit > 0 and self.mistakes >= self.mistakeLimit then
+            self.failed = true
+        end
         self.lastAction = "wrong"
     else
         self.lastAction = "place"
@@ -326,9 +390,22 @@ function Board:toggleNotesMode()
     return self.notesMode
 end
 
+--- 暂停/继续；暂停期间不计时（输入由 UI 遮罩挡住）
+function Board:togglePause()
+    if self.solved or self.failed or not self.started then
+        return false
+    end
+    self.paused = not self.paused
+    return self.paused
+end
+
+function Board:isPaused()
+    return self.paused == true
+end
+
 --- 计时：首次选中格子后才开始走表，通关后停止
 function Board:tick(dt)
-    if self.started and not self.solved then
+    if self.started and not self.solved and not self.failed and not self.paused then
         self.elapsed = self.elapsed + dt
     end
 end
@@ -369,6 +446,7 @@ function Board:serialize()
         hints = self.hintsUsed,
         solved = self.solved and 1 or 0,
         selected = self.selected or 0,
+        daily = self.dailyKey or "",
     }
 end
 
@@ -432,6 +510,10 @@ function Board:restore(data)
     self.selected = (type(data.selected) == "number" and data.selected >= 1 and data.selected <= Sudoku.CELLS)
         and data.selected
         or nil
+    local key = data.daily
+    self.dailyKey = (type(key) == "string" and #key == 10) and key or nil
+    self.paused = false
+    self.failed = false
     self.history = {}
     self.notesMode = false
     self.started = (self.elapsed > 0) or (self.selected ~= nil)

@@ -15,7 +15,13 @@ local S = Theme.SIZE
 
 ---@param onCellTap fun(idx: integer)
 function BoardView.new(onCellTap)
-    local self = setmetatable({ cells = {}, labels = {} }, BoardView)
+    local self = setmetatable({
+        cells = {},
+        labels = {},
+        font_ = Theme.FONT.candidate,
+        baseBg_ = {},
+        anims_ = {},
+    }, BoardView)
 
     local rows = {}
     for r = 1, 9 do
@@ -169,6 +175,7 @@ function BoardView:refresh(board)
         if isWrong then
             bg = C.cellError
         end
+        self.baseBg_[idx] = bg
         cell:SetStyle { backgroundColor = bg }
 
         -- 文字：数字 > 手写笔记 > 自动候选 > 空
@@ -193,13 +200,78 @@ function BoardView:refresh(board)
             label:SetStyle { textAlign = "left", paddingLeft = 5 }
         elseif auto and auto[idx] and #auto[idx] > 0 then
             label:SetText(candidatesText(auto[idx]))
-            label:SetFontSize(Theme.FONT.candidate)
+            label:SetFontSize(self.font_)
             label:SetFontColor(C.digitAuto)
             label:SetStyle { textAlign = "left", paddingLeft = 5 }
         else
             label:SetText("")
         end
     end
+
+    -- 刷新会把底色写回基础色，这里再把进行中的动画盖回去，避免闪一下
+    self:update(0)
+end
+
+--- 落子 / 填错 / 提示的瞬时反馈：从高亮色衰减回该格的常态底色
+---@param idx integer
+---@param kind string|nil "place" | "error" | "hint"
+function BoardView:flash(idx, kind)
+    if not idx then
+        return
+    end
+    local from, dur
+    -- 注意：闪色必须比「同数字高亮」更饱和，否则在满是同数字的盘面上看不出变化
+    if kind == "error" then
+        from, dur = { 248, 113, 113, 255 }, 0.5 -- red-400
+    elseif kind == "hint" then
+        from, dur = { 251, 191, 36, 255 }, 0.5 -- amber-400
+    else
+        from, dur = { 96, 165, 250, 255 }, 0.26 -- blue-400
+    end
+    self.anims_[idx] = { t = 0, dur = dur, from = from }
+end
+
+--- 每帧推进动画；没有动画时是一次空表判断，几乎无开销
+function BoardView:update(dt)
+    if next(self.anims_) == nil then
+        return
+    end
+    for idx, a in pairs(self.anims_) do
+        a.t = a.t + (dt or 0)
+        local k = a.t / a.dur
+        if k >= 1 then
+            self.anims_[idx] = nil
+            local cell = self.cells[idx]
+            if cell then
+                cell:SetStyle { backgroundColor = self.baseBg_[idx] or C.surface }
+            end
+        else
+            local base = self.baseBg_[idx] or C.surface
+            local f = a.from
+            local e = (1 - k) * (1 - k)
+            local cell = self.cells[idx]
+            if cell then
+                cell:SetStyle {
+                    backgroundColor = {
+                        math.floor(base[1] + (f[1] - base[1]) * e + 0.5),
+                        math.floor(base[2] + (f[2] - base[2]) * e + 0.5),
+                        math.floor(base[3] + (f[3] - base[3]) * e + 0.5),
+                        255,
+                    },
+                }
+            end
+        end
+    end
+end
+
+--- 候选字号（设置里可调）
+function BoardView:setCandidateFont(size)
+    local n = math.floor(tonumber(size) or 0)
+    if n < 8 or n > 16 or n == self.font_ then
+        return false
+    end
+    self.font_ = n
+    return true
 end
 
 --- 通关时的收尾表现：把用户填的数字统一染色
