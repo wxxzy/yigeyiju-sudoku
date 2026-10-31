@@ -1,5 +1,5 @@
 -- ============================================================================
--- 存档层
+-- 存档层（两路 key：当前进度 / 历史成绩）
 --   · 主链路：clientCloud 云变量（按账号隔离，跨设备）
 --   · 兜底：进程内内存快照（云端不可用时不丢当前会话；跨启动不保留）
 --   · 为什么不用本地文件：本引擎沙箱禁止 FileSystem:GetAppPreferencesDir
@@ -9,9 +9,10 @@
 local Storage = {}
 
 Storage.SCHEMA = 1
-Storage.CLOUD_KEY = "sudoku_save_v1"
+Storage.CLOUD_KEY = "sudoku_save_v1" -- 当前进度
+Storage.STATS_KEY = "sudoku_stats_v1" -- 历史最佳成绩（清进度时不动它）
 
-local memory_ = nil
+local memory_ = {}
 local lastSource_ = "none"
 local warned_ = false
 
@@ -47,11 +48,10 @@ end
 Storage.isFiniteNumber = isFiniteNumber
 
 -- ---------------------------------------------------------------------------
--- 对外接口
+-- 通用读写
 -- ---------------------------------------------------------------------------
 
---- 保存。data 为纯数据 table，onDone(ok, source) 可选
-function Storage.save(data, onDone)
+local function write(key, data, onDone)
     if type(data) ~= "table" then
         if onDone then
             onDone(false, "none")
@@ -59,12 +59,12 @@ function Storage.save(data, onDone)
         return false
     end
 
-    memory_ = data -- 无论如何先放内存，保证同一进程内可回滚
+    memory_[key] = data -- 无论如何先放内存，保证同一进程内可回滚
 
     local c = cloud()
     if c then
         local dispatched = pcall(function()
-            c:Set(Storage.CLOUD_KEY, data, {
+            c:Set(key, data, {
                 ok = function()
                     lastSource_ = "cloud"
                     if onDone then
@@ -73,7 +73,7 @@ function Storage.save(data, onDone)
                 end,
                 error = function(_, reason)
                     lastSource_ = "memory"
-                    print("[Storage] 云存档失败，退回内存：" .. tostring(reason))
+                    print("[Storage] 云写入失败，退回内存：" .. tostring(reason))
                     if onDone then
                         onDone(false, "memory")
                     end
@@ -95,8 +95,7 @@ function Storage.save(data, onDone)
     return false
 end
 
---- 读取。onLoaded(data, source) 仅在拿到合法存档时回调
-function Storage.load(onLoaded)
+local function read(key, onLoaded)
     if type(onLoaded) ~= "function" then
         return
     end
@@ -104,29 +103,29 @@ function Storage.load(onLoaded)
     local c = cloud()
     if c then
         local dispatched = pcall(function()
-            c:Get(Storage.CLOUD_KEY, {
+            c:Get(key, {
                 ok = function(values)
-                    local data = type(values) == "table" and values[Storage.CLOUD_KEY] or nil
+                    local data = type(values) == "table" and values[key] or nil
                     if type(data) == "table" then
                         lastSource_ = "cloud"
-                        memory_ = data
+                        memory_[key] = data
                         onLoaded(data, "cloud")
-                    elseif memory_ then
+                    elseif memory_[key] then
                         lastSource_ = "memory"
-                        onLoaded(memory_, "memory")
+                        onLoaded(memory_[key], "memory")
                     end
                 end,
                 error = function(_, reason)
-                    print("[Storage] 云存档读取失败：" .. tostring(reason))
-                    if memory_ then
+                    print("[Storage] 云读取失败：" .. tostring(reason))
+                    if memory_[key] then
                         lastSource_ = "memory"
-                        onLoaded(memory_, "memory")
+                        onLoaded(memory_[key], "memory")
                     end
                 end,
                 timeout = function()
-                    if memory_ then
+                    if memory_[key] then
                         lastSource_ = "memory"
-                        onLoaded(memory_, "memory")
+                        onLoaded(memory_[key], "memory")
                     end
                 end,
             })
@@ -136,15 +135,39 @@ function Storage.load(onLoaded)
         end
     end
 
-    if memory_ then
+    if memory_[key] then
         lastSource_ = "memory"
-        onLoaded(memory_, "memory")
+        onLoaded(memory_[key], "memory")
     end
 end
 
---- 清空存档（通关后调用，避免下次进来直接是已完成的盘）
-function Storage.clear()
-    memory_ = nil
+-- ---------------------------------------------------------------------------
+-- 对外接口
+-- ---------------------------------------------------------------------------
+
+--- 保存当前进度
+function Storage.save(data, onDone)
+    return write(Storage.CLOUD_KEY, data, onDone)
+end
+
+--- 读取当前进度
+function Storage.load(onLoaded)
+    return read(Storage.CLOUD_KEY, onLoaded)
+end
+
+--- 保存历史成绩
+function Storage.saveStats(stats, onDone)
+    return write(Storage.STATS_KEY, stats, onDone)
+end
+
+--- 读取历史成绩
+function Storage.loadStats(onLoaded)
+    return read(Storage.STATS_KEY, onLoaded)
+end
+
+--- 清空进度（通关后调用，避免下次进来直接是已完成的盘）；成绩记录保留
+function Storage.clearProgress()
+    memory_[Storage.CLOUD_KEY] = nil
     local c = cloud()
     if c then
         pcall(function()
@@ -152,5 +175,8 @@ function Storage.clear()
         end)
     end
 end
+
+--- 兼容旧名字
+Storage.clear = Storage.clearProgress
 
 return Storage

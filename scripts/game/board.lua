@@ -4,6 +4,8 @@
 -- ============================================================================
 
 local Sudoku = require "game.sudoku"
+local Rating = require "game.rating"
+local PuzzleBank = require "game.puzzle_bank"
 
 local Board = {}
 Board.__index = Board
@@ -29,7 +31,13 @@ end
 --- 开新局
 function Board:reset(difficulty)
     self.difficulty = difficulty or self.difficulty or "normal"
-    local puzzle, solution = Sudoku.generate(self.difficulty)
+
+    -- 优先从题库抽题（难度经过技巧校验）；题库缺档时退回实时生成
+    local puzzle = PuzzleBank.pick(self.difficulty)
+    local solution = puzzle and Sudoku.solve(puzzle)
+    if not puzzle or not solution then
+        puzzle, solution = Sudoku.generate(self.difficulty)
+    end
     self.puzzle = puzzle
     self.solution = solution
 
@@ -51,6 +59,11 @@ function Board:reset(difficulty)
     self.notesMode = false
     self.solved = false
     self.lastAction = nil -- "place" | "wrong" | "erase" | "hint" | "note"，给表现层做反馈
+
+    -- 辅助：简单/普通默认显示自动候选，困难/专家默认关闭（保留思考空间）
+    self.showCandidates = (self.difficulty == "easy" or self.difficulty == "normal")
+    self.hintIdx = nil
+    self.hintReason = nil
 end
 
 function Board:isGiven(idx)
@@ -65,6 +78,9 @@ function Board:select(idx)
     if idx ~= nil then
         self.selected = idx
         self.started = true
+        if idx ~= self.hintIdx then
+            self:clearHint()
+        end
     end
 end
 
@@ -102,6 +118,7 @@ function Board:undo()
     if not snap then
         return false
     end
+    self:clearHint()
     local idx = snap.idx
     self.values[idx] = snap.value
     self.notes[idx] = snap.notes
@@ -123,6 +140,7 @@ function Board:input(n)
     if not self:canEdit(idx) then
         return false
     end
+    self:clearHint()
 
     if self.notesMode then
         if self.values[idx] ~= 0 then
@@ -168,6 +186,7 @@ function Board:erase()
     if not self:canEdit(idx) then
         return false
     end
+    self:clearHint()
     if self.values[idx] == 0 and next(self.notes[idx]) == nil then
         return false
     end
@@ -203,6 +222,66 @@ function Board:hint()
     self.selected = idx
     self.hintsUsed = self.hintsUsed + 1
     self.lastAction = "hint"
+    self:checkSolved()
+    return true
+end
+
+-- ---------------------------------------------------------------------------
+-- 辅助：自动候选 + 下一步提示
+-- ---------------------------------------------------------------------------
+
+--- 清掉当前提示标记（任何落子/选中变化后调用）
+function Board:clearHint()
+    self.hintIdx = nil
+    self.hintReason = nil
+end
+
+--- 切换自动候选显示
+function Board:toggleCandidatesMode()
+    self.showCandidates = not self.showCandidates
+    return self.showCandidates
+end
+
+--- 自动候选：按当前已填数字推算每格的候选，返回 idx -> {数字...}
+function Board:autoCandidates()
+    return Rating.candidates(self.values)
+end
+
+--- 求「下一步」：只找唯一候选 / 唯一位置，不直接填
+--- 同一格再点一次才会填入（见 main 的提示流程）
+---@return table|nil { idx, value, level, reason }
+function Board:requestHint()
+    if self.solved then
+        return nil
+    end
+    local step = Rating.nextStep(self.values)
+    if not step then
+        self:clearHint()
+        return nil
+    end
+    self.hintIdx = step.idx
+    self.hintReason = step.reason
+    self.selected = step.idx
+    return step
+end
+
+--- 把当前提示的格子直接填上（第二次点提示时调用）
+function Board:applyHint()
+    local idx = self.hintIdx
+    if not idx then
+        return false
+    end
+    local step = Rating.nextStep(self.values)
+    if not step or step.idx ~= idx then
+        return false
+    end
+    self:pushHistory(idx)
+    self.values[idx] = step.value
+    self.notes[idx] = {}
+    self.wrong[idx] = false
+    self.hintsUsed = self.hintsUsed + 1
+    self.lastAction = "hint"
+    self:clearHint()
     self:checkSolved()
     return true
 end

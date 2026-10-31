@@ -3,7 +3,8 @@
 -- 结构：
 --   scripts/game/sudoku.lua   纯逻辑（生成 / 求解 / 唯一解校验）
 --   scripts/game/board.lua    棋盘会话状态（选中 / 填数 / 笔记 / 撤销 / 计时 / 序列化）
---   scripts/game/storage.lua  存档（云变量优先，本地文件兜底）
+--   scripts/game/records.lua  每档难度的最佳成绩
+--   scripts/game/storage.lua  存档（云变量优先，内存兜底）
 --   scripts/ui/*              表现层（主题 / 棋盘 / 键盘 / HUD）
 -- 本地校验：
 --   taptap-maker preview validate --entry main.lua --mode validate
@@ -12,6 +13,7 @@
 local UI = require("urhox-libs/UI")
 local Board = require "game.board"
 local Sudoku = require "game.sudoku"
+local Records = require "game.records"
 local Storage = require "game.storage"
 local BoardView = require "ui.board_view"
 local Keypad = require "ui.keypad"
@@ -34,6 +36,10 @@ local root_ = nil
 local boardArea_ = nil
 local resultShown_ = false
 
+-- 待开局难度（难度按钮改的是它，真正开局要按「新局」并确认）
+local pendingDifficulty_ = CONFIG.Difficulty
+local records_ = Records.new()
+
 -- 自适应与存档
 local layoutTimer_ = 0
 local autosaveTimer_ = 0
@@ -54,30 +60,47 @@ function Start()
     }
 
     board_ = Board.new(CONFIG.Difficulty)
+    pendingDifficulty_ = CONFIG.Difficulty
+    records_ = Records.new()
 
     BuildUI()
 
-    -- 先尝试续上次进度，再首次刷新（本地存档会同步回调，云端异步）
+    -- 历史成绩（同步/异步都可能，读到即更新）
+    Storage.loadStats(function(data)
+        records_ = Records.sanitize(data)
+        local n = 0
+        for _ in pairs(records_.best) do
+            n = n + 1
+        end
+        print("=== 已载入历史成绩：" .. n .. " 档 ===")
+    end)
+
+    -- 再尝试续上次进度（本地/云端回调可能同步，因此放在建完 UI 之后）
     Storage.load(function(data)
         -- 玩家已经开始动了就不覆盖，避免异步回调把当前进度冲掉
         if saveDirty_ or board_.started then
             return
         end
         if board_:restore(data) then
+            pendingDifficulty_ = board_.difficulty
+            hud_:setDifficulty(pendingDifficulty_)
+            hud_:setPendingMismatch(false)
             resultShown_ = board_.solved
             RefreshAll()
-            print(string.format("=== 续上次进度：%s，空格 %d，用时 %s ===",
-                board_.difficulty, board_:emptyCount(), board_:timeText()))
+            print("=== 续上次进度：" .. board_.difficulty
+                .. "，空格 " .. board_:emptyCount() .. "，用时 " .. board_:timeText() .. " ===")
         end
     end)
 
+    hud_:setDifficulty(pendingDifficulty_)
     RefreshAll()
     FitBoard()
 
     SubscribeToEvent("Update", "HandleUpdate")
     SubscribeToEvent("KeyDown", "HandleKeyDown")
 
-    print(string.format("=== %s 启动，难度 %s，空格 %d ===", CONFIG.Title, board_.difficulty, board_:emptyCount()))
+    print("=== " .. CONFIG.Title .. " 启动，难度 " .. board_.difficulty
+        .. "，空格 " .. board_:emptyCount() .. " ===")
 end
 
 function Stop()
@@ -93,28 +116,64 @@ end
 
 function BuildUI()
     boardView_ = BoardView.new(function(idx)
+        if hud_ and hud_:isModalOpen() then
+            return
+        end
         board_:select(idx)
         RefreshAll()
     end)
 
     keypad_ = Keypad.new {
         onDigit = function(n)
+            if hud_:isModalOpen() then
+                return
+            end
             board_:input(n)
             RefreshAll()
         end,
         onErase = function()
+            if hud_:isModalOpen() then
+                return
+            end
             board_:erase()
             RefreshAll()
         end,
         onNotes = function()
+            if hud_:isModalOpen() then
+                return
+            end
             board_:toggleNotesMode()
             RefreshAll()
         end,
         onHint = function()
-            board_:hint()
+            if hud_:isModalOpen() then
+                return
+            end
+            -- 第一次点：标出可确定的格并说明理由；再点一次才填入
+            if board_.hintIdx then
+                board_:applyHint()
+                RefreshAll()
+                return
+            end
+            local step = board_:requestHint()
+            if step then
+                hud_:toast("提示：" .. step.reason .. "（再点一次「提示」直接填入）", 3.5)
+            else
+                hud_:toast("当前盘面没有能一步确定的格子，试试打开候选数或换个角度", 3.5)
+            end
+            RefreshAll()
+        end,
+        onCandidates = function()
+            if hud_:isModalOpen() then
+                return
+            end
+            board_:toggleCandidatesMode()
             RefreshAll()
         end,
         onUndo = function()
+            if hud_:isModalOpen() then
+                return
+            end
             board_:undo()
             RefreshAll()
         end,
@@ -122,10 +181,13 @@ function BuildUI()
 
     hud_ = HUD.new {
         onNewGame = function()
-            NewGame(board_.difficulty)
+            RequestNewGame()
         end,
         onCycleDifficulty = function()
-            NewGame(NextDifficulty(board_.difficulty))
+            CycleDifficulty()
+        end,
+        onConfirmNewGame = function()
+            StartNewGame(pendingDifficulty_)
         end,
     }
 
@@ -164,6 +226,8 @@ function BuildUI()
                 },
             },
             hud_.overlay,
+            hud_.confirmOverlay,
+            hud_.toastPanel,
         },
     }
 
@@ -252,15 +316,50 @@ end
 -- 流程控制
 -- ============================================================================
 
+local function difficultyLabel(key)
+    for _, d in ipairs(Sudoku.DIFFICULTIES) do
+        if d.key == key then
+            return d.label
+        end
+    end
+    return "普通"
+end
+
+--- 当前盘面是否值得保护（已经开始且没通关）
+local function HasProgress()
+    return board_.started and not board_.solved
+end
+
+--- 难度按钮：只切换待开局难度，不碰当前盘
+function CycleDifficulty()
+    pendingDifficulty_ = NextDifficulty(pendingDifficulty_)
+    hud_:setDifficulty(pendingDifficulty_)
+    hud_:setPendingMismatch(pendingDifficulty_ ~= board_.difficulty)
+end
+
+--- 新局入口：有进度时先确认，避免手快点掉
+function RequestNewGame()
+    if HasProgress() then
+        hud_:showConfirm("将以「" .. difficultyLabel(pendingDifficulty_)
+            .. "」开始新局，当前这局（" .. board_:timeText() .. "）的进度会被放弃。")
+        return
+    end
+    StartNewGame(pendingDifficulty_)
+end
+
 ---@param difficulty string
-function NewGame(difficulty)
-    board_:reset(difficulty)
+function StartNewGame(difficulty)
+    pendingDifficulty_ = difficulty or pendingDifficulty_
+    board_:reset(pendingDifficulty_)
     resultShown_ = false
     saveDirty_ = true
     autosaveTimer_ = 0
     hud_:hideResult()
+    hud_:hideConfirm()
+    hud_:setDifficulty(pendingDifficulty_)
+    hud_:setPendingMismatch(false)
     RefreshAll()
-    print(string.format("=== 新局：%s，空格 %d ===", difficulty, board_:emptyCount()))
+    print("=== 新局：" .. pendingDifficulty_ .. "，空格 " .. board_:emptyCount() .. " ===")
 end
 
 --- 难度循环：简单 → 普通 → 困难 → 专家 → 简单
@@ -285,7 +384,7 @@ function HandleUpdate(eventType, eventData)
     local dt = eventData["TimeStep"]:GetFloat()
 
     board_:tick(dt)
-    hud_:update(board_)
+    hud_:update(board_, dt)
 
     -- 布局自适应：窗口尺寸变了（转屏 / 拖动窗口）就重算棋盘边长
     layoutTimer_ = layoutTimer_ + dt
@@ -305,10 +404,18 @@ function HandleUpdate(eventType, eventData)
     if board_.solved and not resultShown_ then
         resultShown_ = true
         boardView_:markSolved()
-        hud_:showResult(board_)
+
+        -- 成绩记录：用时更短才刷新，记录该局的错误次数
+        local isRecord, prevBest = Records.submit(records_, board_.difficulty, board_.elapsed, board_.mistakes)
+        if isRecord then
+            Storage.saveStats(records_)
+        end
+
+        hud_:showResult(board_, { isRecord = isRecord, prevBest = prevBest })
         saveDirty_ = false
-        Storage.clear() -- 通关后清档，下次进来直接开新局
-        print(string.format("=== 通关：%s，错误 %d 次 ===", board_:timeText(), board_.mistakes))
+        Storage.clearProgress() -- 进度清掉，成绩保留
+        print("=== 通关：" .. board_:timeText() .. "，错误 " .. board_.mistakes
+            .. " 次" .. (isRecord and "，刷新记录" or "") .. " ===")
     end
 end
 
@@ -327,6 +434,10 @@ local DIGIT_KEYS = {
 ---@param eventType string
 ---@param eventData KeyDownEventData
 function HandleKeyDown(eventType, eventData)
+    if hud_ and hud_:isModalOpen() then
+        return
+    end
+
     local key = eventData["Key"]:GetInt()
 
     local digit = DIGIT_KEYS[key]
@@ -353,7 +464,7 @@ function HandleKeyDown(eventType, eventData)
     elseif key == KEY_U then
         board_:undo()
     elseif key == KEY_R then
-        NewGame(board_.difficulty)
+        RequestNewGame()
         return
     else
         return

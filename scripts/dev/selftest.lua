@@ -168,10 +168,124 @@ local function run()
         print("[SELFTEST][INFO] 当前环境无存档后端，跳过存取校验")
     end
 
+    -- 5) 成绩记录：首局算记录、更慢不覆盖、更快才刷新
+    local Records = require "game.records"
+    local recs = Records.new()
+
+    local isRec, prev = Records.submit(recs, "easy", 500, 3)
+    check(isRec == true and prev == nil, "首局通关没有记为记录")
+
+    isRec, prev = Records.submit(recs, "easy", 600, 0)
+    check(isRec == false, "更慢的成绩覆盖了记录")
+    check(prev ~= nil and prev.time == 500, "更慢时没拿到旧记录")
+    check(Records.bestOf(recs, "easy").time == 500, "记录被更慢的成绩改写")
+
+    isRec, prev = Records.submit(recs, "easy", 420, 7)
+    check(isRec == true, "更快的成绩没有刷新记录")
+    local best = Records.bestOf(recs, "easy")
+    check(best.time == 420 and best.mistakes == 7, "刷新后的记录内容不对")
+
+    -- 难度之间互不影响
+    check(Records.bestOf(recs, "hard") == nil, "不同难度记录串了")
+
+    -- 脏数据必须被清掉
+    local dirty = Records.sanitize({ best = { easy = { time = "abc" }, hard = { time = 300 } } })
+    check(Records.bestOf(dirty, "easy") == nil, "脏成绩没有被丢弃")
+    check(Records.bestOf(dirty, "hard") ~= nil, "合法成绩被误删")
+
+    -- 成绩也能走存档层往返
+    local statsSaved = false
+    Storage.saveStats(recs, function(ok)
+        statsSaved = ok
+    end)
+    if statsSaved then
+        local loadedStats = nil
+        Storage.loadStats(function(data)
+            loadedStats = Records.sanitize(data)
+        end)
+        check(type(loadedStats) == "table", "成绩存了却读不回来")
+        if type(loadedStats) == "table" then
+            local e = Records.bestOf(loadedStats, "easy")
+            check(e ~= nil and e.time == 420, "成绩读回后内容不一致")
+        end
+    end
+
+    -- 6) 题库：每档题目必须真的符合该档技巧要求
+    local PuzzleBank = require "game.puzzle_bank"
+    local Rating = require "game.rating"
+
+    local EXPECT_LEVEL = { easy = 1, normal = 2, hard = 3 }
+    for _, key in ipairs(PuzzleBank.TIERS) do
+        local list = PuzzleBank.DATA[key] or {}
+        check(#list > 0, key .. " 题库为空")
+
+        for i, str in ipairs(list) do
+            check(#str == 81, key .. " 第" .. i .. "题长度不是 81")
+            local puzzle = {}
+            for k = 1, 81 do
+                puzzle[k] = tonumber(str:sub(k, k)) or 0
+            end
+            check(Sudoku.countSolutions(puzzle, 2) == 1, key .. " 第" .. i .. "题不是唯一解")
+
+            local r = Rating.analyze(puzzle)
+            if key == "expert" then
+                -- 专家：基础技巧（含数对）解不完
+                check(not r.solved, key .. " 第" .. i .. "题其实基础技巧能解完")
+            else
+                check(r.solved, key .. " 第" .. i .. "题基础技巧解不完")
+                check(r.level == EXPECT_LEVEL[key],
+                    key .. " 第" .. i .. "题技巧等级 " .. r.level .. "，期望 " .. EXPECT_LEVEL[key])
+
+                -- 解出来的盘面必须与真实解一致（防过度排除导致的错填）
+                local truth = Sudoku.solve(puzzle)
+                local same = truth ~= nil
+                if truth then
+                    for k = 1, 81 do
+                        if r.vals[k] ~= truth[k] then
+                            same = false
+                            break
+                        end
+                    end
+                end
+                check(same, key .. " 第" .. i .. "题推导过程出错")
+            end
+        end
+    end
+
+    -- 7) 提示：给出的下一步必须是对的
+    local hintBoard = Board.new("easy")
+    hintBoard.showCandidates = true
+    local step = hintBoard:requestHint()
+    check(step ~= nil, "简单局求不出下一步提示")
+    if step then
+        check(step.value == hintBoard.solution[step.idx], "提示给的值不对")
+        check(hintBoard.hintIdx == step.idx, "提示没有记录高亮格")
+        check(hintBoard:applyHint() == true, "提示无法填入")
+        check(hintBoard.values[step.idx] == step.value, "填入后数字不对")
+        check(hintBoard.hintsUsed == 1, "提示次数没有累计")
+        check(hintBoard.hintIdx == nil, "填入后没有清掉提示标记")
+    end
+
+    -- 8) 自动候选：给的候选里不能包含与已填数字冲突的数
+    local cands = hintBoard:autoCandidates()
+    for i = 1, 81 do
+        if hintBoard.values[i] == 0 then
+            for _, v in ipairs(cands[i] or {}) do
+                local conflict = false
+                for j = 1, 81 do
+                    if j ~= i and hintBoard.values[j] == v and Sudoku.isPeer(i, j) then
+                        conflict = true
+                        break
+                    end
+                end
+                check(not conflict, "第" .. i .. "格候选 " .. v .. " 与同行列宫冲突")
+            end
+        end
+    end
+
     print(string.format("[SELFTEST] checks=%d failures=%d", checks, failures))
     print(failures == 0 and "[SELFTEST] RESULT=OK" or "[SELFTEST] RESULT=FAILED")
 end
-
 function Start()
     local ok, err = pcall(run)
     if not ok then

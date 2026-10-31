@@ -63,10 +63,25 @@ function Keypad.new(handlers)
         end,
     }
 
+    self.candidatesButton = UI.Button {
+        text = "候选 开",
+        flex = 1,
+        height = S.toolHeight,
+        fontSize = F.body,
+        backgroundColor = C.surfaceMuted,
+        hoverBackgroundColor = C.accentSoft,
+        pressedBackgroundColor = C.accentPressed,
+        textColor = C.textSecondary,
+        borderRadius = 8,
+        onClick = function()
+            handlers.onCandidates()
+        end,
+    }
+
     local toolRow = UI.Panel {
         width = "100%",
         flexDirection = "row",
-        gap = 8,
+        gap = 6,
         children = {
             UI.Button {
                 text = "撤销",
@@ -97,6 +112,7 @@ function Keypad.new(handlers)
                 end,
             },
             self.notesButton,
+            self.candidatesButton,
             UI.Button {
                 text = "提示",
                 flex = 1,
@@ -163,6 +179,12 @@ function Keypad:update(board)
     self.notesButton:SetStyle {
         backgroundColor = board.notesMode and C.accentSoft or C.surfaceMuted,
         textColor = board.notesMode and C.accent or C.textSecondary,
+    }
+
+    self.candidatesButton:SetText(board.showCandidates and "候选 开" or "候选 关")
+    self.candidatesButton:SetStyle {
+        backgroundColor = board.showCandidates and C.accentSoft or C.surfaceMuted,
+        textColor = board.showCandidates and C.accent or C.textSecondary,
     }
 end
 

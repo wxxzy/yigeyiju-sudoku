@@ -82,18 +82,40 @@ function BoardView.new(onCellTap)
     return self
 end
 
---- 笔记文本：3x3 铅笔标记排版
-local function notesText(notes)
+--- 3x3 小字排版：present(n) 决定该位置是否显示数字 n
+local function gridText(present)
     local lines = {}
     for row = 0, 2 do
         local parts = {}
         for col = 1, 3 do
             local n = row * 3 + col
-            parts[#parts + 1] = notes[n] and tostring(n) or " "
+            if present(n) then
+                parts[#parts + 1] = tostring(n)
+            else
+                parts[#parts + 1] = " "
+            end
         end
         lines[#lines + 1] = table.concat(parts, " ")
     end
     return table.concat(lines, "\n")
+end
+
+--- 笔记文本（玩家手写的铅笔标记）
+local function notesText(notes)
+    return gridText(function(n)
+        return notes[n] == true
+    end)
+end
+
+--- 自动候选文本
+local function candidatesText(list)
+    local set = {}
+    for _, n in ipairs(list or {}) do
+        set[n] = true
+    end
+    return gridText(function(n)
+        return set[n] == true
+    end)
 end
 
 --- 显式指定棋盘边长（由外层按可用空间算，兼顾横屏 / 平板 / 大屏）
@@ -122,15 +144,20 @@ function BoardView:refresh(board)
     local selBox = sel and Sudoku.BOX[sel] or nil
     local selValue = sel and board.values[sel] or 0
 
+    -- 自动候选只在开启时才算，省掉每次点击的推算开销
+    local auto = board.showCandidates and board:autoCandidates() or nil
+
     for idx = 1, Sudoku.CELLS do
         local cell = self.cells[idx]
         local label = self.labels[idx]
         local value = board.values[idx]
         local isWrong = board.wrong[idx]
 
-        -- 背景：选中 > 同数字 > 同行同列同宫 > 默认
+        -- 背景：提示 > 选中 > 同数字 > 同行同列同宫 > 默认
         local bg
-        if sel == idx then
+        if board.hintIdx == idx then
+            bg = C.cellHint
+        elseif sel == idx then
             bg = C.cellSelected
         elseif selValue ~= 0 and value == selValue then
             bg = C.cellSameDigit
@@ -144,10 +171,11 @@ function BoardView:refresh(board)
         end
         cell:SetStyle { backgroundColor = bg }
 
-        -- 文字：数字 > 笔记 > 空
+        -- 文字：数字 > 手写笔记 > 自动候选 > 空
         if value ~= 0 then
             label:SetText(tostring(value))
             label:SetFontSize(Theme.FONT.cell)
+            label:SetStyle { textAlign = "center", paddingLeft = 0 }
             if isWrong then
                 label:SetFontColor(C.digitError)
             elseif board:isGiven(idx) then
@@ -159,6 +187,13 @@ function BoardView:refresh(board)
             label:SetText(notesText(board.notes[idx]))
             label:SetFontSize(Theme.FONT.note)
             label:SetFontColor(C.digitNote)
+            -- 小字必须左对齐：居中会把行尾空格吃掉，导致 3x3 列错位
+            label:SetStyle { textAlign = "left", paddingLeft = 5 }
+        elseif auto and auto[idx] and #auto[idx] > 0 then
+            label:SetText(candidatesText(auto[idx]))
+            label:SetFontSize(Theme.FONT.note)
+            label:SetFontColor(C.digitAuto)
+            label:SetStyle { textAlign = "left", paddingLeft = 5 }
         else
             label:SetText("")
         end

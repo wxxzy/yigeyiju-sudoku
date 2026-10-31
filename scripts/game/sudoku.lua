@@ -4,21 +4,60 @@
 --   · 位掩码 + MRV（最小候选优先）搜索，挖洞校验足够快
 -- ============================================================================
 
+local Rating = require "game.rating"
+
 local Sudoku = {}
 
 Sudoku.SIZE = 9
 Sudoku.CELLS = 81
 
 -- 挖洞最多尝试几轮（取最优结果），轮数越多越接近目标难度，代价是生成耗时
-Sudoku.GENERATE_ATTEMPTS = 4
+Sudoku.GENERATE_ATTEMPTS = 24
+-- 单次生成的软时间上限（秒），超时就用当前最优，避免卡住 UI
+Sudoku.GENERATE_TIME_BUDGET = 0.9
 
--- 难度表：givens = 保留的已知数字个数（越小越难）
+-- 难度表
+--   givens      期望已知数（用于评分的中心值）
+--   minGivens   生成时挖到的下限（不低于它）
+--   maxGivens   可接受的上限
+--   minLevel    至少需要到哪层技巧（1 唯一候选 / 2 唯一位置 / 3 区块排除 / 4 数对）
+--   maxLevel    最多到哪层（超过就太难，不要）
 Sudoku.DIFFICULTIES = {
-    { key = "easy",   label = "简单", givens = 42 },
-    { key = "normal", label = "普通", givens = 34 },
-    { key = "hard",   label = "困难", givens = 29 },
-    { key = "expert", label = "专家", givens = 25 },
+    {
+        key = "easy", label = "简单",
+        givens = 48, minGivens = 45, maxGivens = 52,
+        minLevel = 1, maxLevel = 1,
+        desc = "只看候选就能填，不需要任何技巧",
+    },
+    {
+        key = "normal", label = "普通",
+        givens = 40, minGivens = 36, maxGivens = 43,
+        minLevel = 2, maxLevel = 2,
+        desc = "需要找「某数只有一个位置」",
+    },
+    {
+        key = "hard", label = "困难",
+        givens = 33, minGivens = 29, maxGivens = 36,
+        minLevel = 3, maxLevel = 3,
+        desc = "需要区块排除（指向/声明）",
+    },
+    {
+        key = "expert", label = "专家",
+        givens = 28, minGivens = 24, maxGivens = 31,
+        minLevel = 4, maxLevel = 4,
+        desc = "需要数对等进阶排除",
+    },
 }
+
+--- 取难度配置（找不到就回落到普通）
+function Sudoku.configOf(difficulty)
+    for _, d in ipairs(Sudoku.DIFFICULTIES) do
+        if d.key == difficulty then
+            return d
+        end
+    end
+    return Sudoku.DIFFICULTIES[2]
+end
 
 -- ---------------------------------------------------------------------------
 -- 索引与位掩码的基础设施
@@ -237,30 +276,67 @@ local function dig(solution, target)
     return puzzle, kept
 end
 
+--- 随机生成一道挖到指定已知数的题（不做技巧校验，给上层筛选用）
+---@param floorGivens integer 挖到不超过这个已知数就停
+---@return table puzzle, table solution, integer givens
+function Sudoku.generateRaw(floorGivens)
+    local solution = Sudoku.generateSolution()
+    local puzzle, kept = dig(solution, floorGivens)
+    return puzzle, solution, kept
+end
+
 --- 按难度生成题目，返回 puzzle（0 表示空格）, solution
---- 贪心挖洞不一定每次都能挖到目标个数，所以做多轮取最优，保证难度手感稳定
+--- 先用已知数区间挖洞，再用技巧评分器校验「需要到哪一层」，
+--- 达标才收；多轮拿不到就返回最接近的一题（保证不卡住 UI）
 function Sudoku.generate(difficulty)
-    local target = Sudoku.DIFFICULTIES[2].givens
-    for _, d in ipairs(Sudoku.DIFFICULTIES) do
-        if d.key == difficulty then
-            target = d.givens
-            break
-        end
-    end
+    local cfg = Sudoku.configOf(difficulty)
 
-    local bestPuzzle, bestSolution, bestKept = nil, nil, nil
+    local best, bestScore = nil, nil
+    local deadline = os.clock() + Sudoku.GENERATE_TIME_BUDGET
+
     for _ = 1, Sudoku.GENERATE_ATTEMPTS do
-        local solution = Sudoku.generateSolution()
-        local puzzle, kept = dig(solution, target)
-        if bestKept == nil or kept < bestKept then
-            bestPuzzle, bestSolution, bestKept = puzzle, solution, kept
+        local puzzle, solution, kept = Sudoku.generateRaw(cfg.minGivens)
+        local rate = Rating.analyze(puzzle)
+
+        local score = 0
+        -- 技巧等级落在区间内加 100；越界按距离扣分
+        if rate.solved then
+            if rate.level >= cfg.minLevel and rate.level <= cfg.maxLevel then
+                score = score + 100
+            else
+                local dist
+                if rate.level < cfg.minLevel then
+                    dist = cfg.minLevel - rate.level
+                else
+                    dist = rate.level - cfg.maxLevel
+                end
+                score = score - dist * 25
+            end
+        else
+            score = score - 60 -- 基础技巧解不完的题不参与评级（对玩家过难且不可解释）
         end
-        if bestKept <= target then
-            break
+
+        -- 已知数落在 [minGivens, maxGivens] 再加 40
+        if kept >= cfg.minGivens and kept <= cfg.maxGivens then
+            score = score + 40
+        else
+            score = score - math.abs(kept - cfg.givens)
+        end
+
+        if bestScore == nil or score > bestScore then
+            bestScore = score
+            best = { puzzle = puzzle, solution = solution, givens = kept, rate = rate }
+        end
+
+        if score >= 140 then
+            break -- 技巧与已知数都达标
+        end
+        if os.clock() > deadline then
+            break -- 超时就用当前最优
         end
     end
 
-    return bestPuzzle, bestSolution, bestKept
+    return best.puzzle, best.solution, best.givens, best.rate
 end
 
 --- 两个格子是否同行/同列/同宫
