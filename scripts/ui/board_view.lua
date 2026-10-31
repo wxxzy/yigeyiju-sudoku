@@ -176,10 +176,12 @@ function BoardView:refresh(board)
             label:SetText(tostring(value))
             label:SetFontSize(Theme.FONT.cell)
             label:SetStyle { textAlign = "center", paddingLeft = 0 }
+            local isSameDigit = (selValue ~= 0 and value == selValue and sel ~= idx)
             if isWrong then
                 label:SetFontColor(C.digitError)
             elseif board:isGiven(idx) then
-                label:SetFontColor(C.digitGiven)
+                -- 同数字的给定格用更深的蓝，方便一眼扫出同一数字分布
+                label:SetFontColor(isSameDigit and C.digitGivenHighlight or C.digitGiven)
             else
                 label:SetFontColor(C.digitUser)
             end
@@ -191,7 +193,7 @@ function BoardView:refresh(board)
             label:SetStyle { textAlign = "left", paddingLeft = 5 }
         elseif auto and auto[idx] and #auto[idx] > 0 then
             label:SetText(candidatesText(auto[idx]))
-            label:SetFontSize(Theme.FONT.note)
+            label:SetFontSize(Theme.FONT.candidate)
             label:SetFontColor(C.digitAuto)
             label:SetStyle { textAlign = "left", paddingLeft = 5 }
         else

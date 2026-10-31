@@ -23,9 +23,9 @@ Theme.COLORS = {
     accentSoft = { 219, 234, 254, 255 },
 
     -- 棋盘格状态
-    cellSelected = { 191, 219, 254, 255 },
-    cellPeer = { 238, 244, 252, 255 },
-    cellSameDigit = { 219, 234, 254, 255 },
+    cellSelected = { 147, 197, 253, 255 }, -- 选中：最重
+    cellSameDigit = { 191, 219, 254, 255 }, -- 同数字：次重（原先是几乎看不见的浅色）
+    cellPeer = { 236, 243, 250, 255 }, -- 同行/列/宫：最浅
     cellError = { 254, 226, 226, 255 },
     cellHint = { 254, 243, 199, 255 }, -- 提示高亮（琥珀）
 
@@ -35,10 +35,11 @@ Theme.COLORS = {
 
     -- 数字
     digitGiven = { 30, 41, 59, 255 },
+    digitGivenHighlight = { 30, 64, 175, 255 }, -- 被高亮的给定数字
     digitUser = { 37, 99, 235, 255 },
     digitError = { 220, 38, 38, 255 },
     digitNote = { 100, 116, 139, 255 },
-    digitAuto = { 148, 163, 184, 255 }, -- 自动候选：比手写笔记更淡
+    digitAuto = { 113, 130, 154, 255 }, -- 自动候选：比之前加深，保证小字可读
 
     -- 浮层
     overlay = { 15, 23, 42, 150 },
@@ -47,6 +48,7 @@ Theme.COLORS = {
 Theme.FONT = {
     cell = 26,
     note = 10,
+    candidate = 11, -- 自动候选（空格的推算小字）
     keypad = 22,
     title = 20,
     body = 14,

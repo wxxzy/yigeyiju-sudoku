@@ -160,6 +160,12 @@ end
 ---@param board table
 function Keypad:update(board)
     local counts = board:digitCounts()
+    -- 当前选中格里的数字，用来在键盘上同步高亮，强化「这个数字在哪」
+    local selDigit = 0
+    if board.selected and board.values[board.selected] then
+        selDigit = board.values[board.selected]
+    end
+
     for n = 1, 9 do
         local left = 9 - (counts[n] or 0)
         local label = self.countLabels[n]
@@ -171,8 +177,13 @@ function Keypad:update(board)
             label:SetFontColor(C.accent)
         end
 
-        -- 该数字已用满时弱化按键，但不禁用（避免误判后无法继续操作）
-        self.digitButtons[n]:SetStyle { opacity = (left > 0) and 1 or 0.45 }
+        local isActive = (n == selDigit)
+        self.digitButtons[n]:SetStyle {
+            -- 该数字已用满时弱化按键，但不禁用（避免误判后无法继续操作）
+            opacity = (left > 0) and 1 or 0.45,
+            backgroundColor = isActive and C.cellSameDigit or C.surface,
+            textColor = isActive and C.accent or C.digitUser,
+        }
     end
 
     self.notesButton:SetText(board.notesMode and "笔记 开" or "笔记 关")
