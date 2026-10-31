@@ -443,6 +443,16 @@ function HUD.new(handlers)
         width = "100%",
     }
 
+    -- 告诉玩家为什么会结束、以及去哪里改
+    self.failHintLabel = UI.Label {
+        text = "",
+        fontSize = F.tiny,
+        fontColor = C.textMuted,
+        textAlign = "center",
+        whiteSpace = "normal",
+        width = "100%",
+    }
+
     self.failOverlay = UI.Panel {
         position = "absolute",
         top = 0,
@@ -464,7 +474,24 @@ function HUD.new(handlers)
                 children = {
                     UI.Label { text = "本局结束", fontSize = 20, fontColor = C.textPrimary },
                     self.failDetailLabel,
-                    UI.Panel { height = 4 },
+                    self.failHintLabel,
+                    UI.Panel { height = 2 },
+                    UI.Button {
+                        text = "去设置里调整",
+                        width = "100%",
+                        height = 32,
+                        fontSize = F.tiny,
+                        backgroundColor = { 0, 0, 0, 0 },
+                        hoverBackgroundColor = C.accentSoft,
+                        pressedBackgroundColor = C.accentSoft,
+                        textColor = C.accent,
+                        borderRadius = 8,
+                        onClick = function()
+                            -- 失败弹层在设置之上，先关掉自己再打开设置
+                            self.failOverlay:SetVisible(false)
+                            self.settingsOverlay:SetVisible(true)
+                        end,
+                    },
                     UI.Button {
                         text = "再来一局",
                         width = "100%",
@@ -664,6 +691,14 @@ function HUD:showFail(board)
             .. " · 坚持了 " .. board:timeText()
             .. " · 错误 " .. board.mistakes .. " 次"
     )
+
+    local limit = math.floor(tonumber(board.mistakeLimit) or 0)
+    if limit > 0 then
+        self.failHintLabel:SetText("错误上限 " .. tostring(limit) .. " 次，可在设置里改成「不限」")
+    else
+        self.failHintLabel:SetText("本局已结束")
+    end
+
     self.failOverlay:SetVisible(true)
 end
 
