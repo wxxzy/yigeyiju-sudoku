@@ -5,7 +5,7 @@
     "id": "704603814"
   },
   "entry": "main.lua",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "taptap_publish": {
     "title": "数独",
     "category": "casual",
@@ -14,40 +14,39 @@
     "app_platforms": "1,2",
     "app_id": 1012043,
     "developer_id": 492262,
-    "miniapp_id": "tapmcnb6kejwswpr0o"
+    "miniapp_id": "tapmcnb6kejwswpr0o",
+    "trial_note": "我自己玩手机数独时最烦两件事：一是难度标签名不副实，号称\"简单\"却要先学会怎么找唯一解；二是提示直接给答案，等于替你把题做了。\n这一版把四档难度按\"到底需要哪一层技巧\"重新分级——简单档保证只靠扫候选就能填完，普通才引入唯一位置，困难需要区块排除，专家才真的要动脑。提示也改成两段：第一次只告诉你这一格为什么能确定，第二次你确认了才替你落笔。自动候选和同数字高亮可以随时开关，想硬核就关掉。\n如果你在\"简单\"档还是卡住了，那不是你的问题，是题出得不够好。欢迎来骂。"
   },
   "assets": {
-    "icon": "",
+    "icon": "./_uploads/724c1239f0f83f0de4f6adabc4779c02cb690b96caf0cf50d7061c78beda782d.png",
     "screenshots": [],
     "promotional_image": "",
-    "icon_url": "https://img.tapimg.com/market/images/ef4719159691d7db73760cadfc67eac4.png"
+    "icon_url": "https://img-tc.tapimg.com/market/images/FtwBqY2a99RYWkmI2xpKEEASVDoj.png"
   },
   "metadata": {
-    "updated_at": "2026-10-31T04:48:43.576Z"
+    "updated_at": "2026-10-31T05:21:57.505Z"
   },
   "test_qrcode": {
     "url": "https://tapcode-sce.spark.xd.com/qrcode/m_1d8f_1793422123360.png",
     "generated_at": "2026-10-31T04:48:43.576Z"
   },
   "dc_publish_sync": {
-    "synced": false,
+    "synced": true,
     "dcVersion": "V-20261031",
     "dcStatus": "INIT",
     "baseFields": {
       "title": "数独",
       "description": null,
       "category": "casual",
-      "trial_note": null,
-      "icon_url": "https://img.tapimg.com/market/images/ef4719159691d7db73760cadfc67eac4.png",
+      "trial_note": "我自己玩手机数独时最烦两件事：一是难度标签名不副实，号称\"简单\"却要先学会怎么找唯一解；二是提示直接给答案，等于替你把题做了。\n这一版把四档难度按\"到底需要哪一层技巧\"重新分级——简单档保证只靠扫候选就能填完，普通才引入唯一位置，困难需要区块排除，专家才真的要动脑。提示也改成两段：第一次只告诉你这一格为什么能确定，第二次你确认了才替你落笔。自动候选和同数字高亮可以随时开关，想硬核就关掉。\n如果你在\"简单\"档还是卡住了，那不是你的问题，是题出得不够好。欢迎来骂。",
+      "icon_url": "https://img-tc.tapimg.com/market/images/FtwBqY2a99RYWkmI2xpKEEASVDoj.png",
       "banner_url": null,
       "square_promo_url": null,
       "cover_horizontal_url": null,
       "cover_vertical_url": null,
       "screenshot_urls": null
     },
-    "pending": {
-      "icon_url": "https://img.tapimg.com/market/images/ef4719159691d7db73760cadfc67eac4.png"
-    },
+    "pending": {},
     "baseGameplayDemoVideoId": 0
   }
 }
