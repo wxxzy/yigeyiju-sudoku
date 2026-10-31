@@ -8,7 +8,7 @@
   "version": "1.0.5",
   "taptap_publish": {
     "title": "数独",
-    "category": "puzzle",
+    "category": "casual",
     "screen_orientation": "portrait",
     "collection_type": "sce",
     "app_platforms": "1,2",
@@ -23,14 +23,14 @@
     "icon_url": "https://img.tapimg.com/market/images/ef4719159691d7db73760cadfc67eac4.png"
   },
   "metadata": {
-    "updated_at": "2026-10-31T04:45:14.972Z"
+    "updated_at": "2026-10-31T04:48:43.576Z"
   },
   "test_qrcode": {
-    "url": "https://tapcode-sce.spark.xd.com/qrcode/m_1d8f_1793421914807.png",
-    "generated_at": "2026-10-31T04:45:14.972Z"
+    "url": "https://tapcode-sce.spark.xd.com/qrcode/m_1d8f_1793422123360.png",
+    "generated_at": "2026-10-31T04:48:43.576Z"
   },
   "dc_publish_sync": {
-    "synced": true,
+    "synced": false,
     "dcVersion": "V-20261031",
     "dcStatus": "INIT",
     "baseFields": {
@@ -45,7 +45,9 @@
       "cover_vertical_url": null,
       "screenshot_urls": null
     },
-    "pending": {},
+    "pending": {
+      "icon_url": "https://img.tapimg.com/market/images/ef4719159691d7db73760cadfc67eac4.png"
+    },
     "baseGameplayDemoVideoId": 0
   }
 }
