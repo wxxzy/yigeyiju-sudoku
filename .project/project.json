@@ -8,8 +8,8 @@
   "version": "1.0.4",
   "taptap_publish": {
     "title": "数独",
-    "category": "casual",
-    "screen_orientation": "landscape",
+    "category": "puzzle",
+    "screen_orientation": "portrait",
     "collection_type": "sce",
     "app_platforms": "1,2",
     "app_id": 1012043,
