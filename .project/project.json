@@ -5,7 +5,7 @@
     "id": "704603814"
   },
   "entry": "main.lua",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "taptap_publish": {
     "title": "数独",
     "category": "casual",
@@ -23,31 +23,29 @@
     "icon_url": "https://img.tapimg.com/market/images/ef4719159691d7db73760cadfc67eac4.png"
   },
   "metadata": {
-    "updated_at": "2026-10-31T04:42:41.751Z"
+    "updated_at": "2026-10-31T04:45:14.972Z"
   },
   "test_qrcode": {
-    "url": "https://tapcode-sce.spark.xd.com/qrcode/m_1d8f_1793421761642.png",
-    "generated_at": "2026-10-31T04:42:41.751Z"
+    "url": "https://tapcode-sce.spark.xd.com/qrcode/m_1d8f_1793421914807.png",
+    "generated_at": "2026-10-31T04:45:14.972Z"
   },
   "dc_publish_sync": {
-    "synced": false,
+    "synced": true,
     "dcVersion": "V-20261031",
     "dcStatus": "INIT",
     "baseFields": {
       "title": "数独",
-      "description": "",
+      "description": null,
       "category": "casual",
-      "trial_note": "",
+      "trial_note": null,
       "icon_url": "https://img.tapimg.com/market/images/ef4719159691d7db73760cadfc67eac4.png",
-      "banner_url": "",
-      "square_promo_url": "",
-      "cover_horizontal_url": "",
-      "cover_vertical_url": "",
-      "screenshot_urls": []
+      "banner_url": null,
+      "square_promo_url": null,
+      "cover_horizontal_url": null,
+      "cover_vertical_url": null,
+      "screenshot_urls": null
     },
-    "pending": {
-      "icon_url": "https://img.tapimg.com/market/images/ef4719159691d7db73760cadfc67eac4.png"
-    },
+    "pending": {},
     "baseGameplayDemoVideoId": 0
   }
 }
