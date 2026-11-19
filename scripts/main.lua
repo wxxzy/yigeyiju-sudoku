@@ -24,7 +24,7 @@ local HUD = require "ui.hud"
 local Theme = require "ui.theme"
 
 local CONFIG = {
-    Title = "唯一解",
+    Title = "一格一局",
     Difficulty = "normal",
     LayoutCheckInterval = 0.25, -- 秒：多久重测一次可用空间
     AutosaveInterval = 10, -- 秒：有改动后多久落一次存档
@@ -611,8 +611,6 @@ end
 ---@param eventData UpdateEventData
 function HandleUpdate(eventType, eventData)
     local dt = eventData["TimeStep"]:GetFloat()
-
-
 
     board_:tick(dt)
     boardView_:update(dt)
