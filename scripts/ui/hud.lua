@@ -119,6 +119,23 @@ function HUD.new(handlers)
         end,
     }
 
+    -- 常驻返回入口：对局中任意状态（进行中 / 暂停 / 通关后看盘 / 失败）一键回主菜单，
+    -- 进度由 main 的 GoHome 自动保存，不会丢
+    self.homeButton = UI.Button {
+        text = "主界面",
+        height = 28,
+        fontSize = F.small,
+        backgroundColor = { 0, 0, 0, 0 },
+        hoverBackgroundColor = C.accentSoft,
+        pressedBackgroundColor = C.accentSoft,
+        textColor = C.textMuted,
+        borderRadius = 14,
+        paddingHorizontal = 8,
+        onClick = function()
+            handlers.onHome()
+        end,
+    }
+
     -- 上排：操作（难度 / 每日 / 新局）
     self.primaryRow = UI.Panel {
         width = "100%",
@@ -161,6 +178,7 @@ function HUD.new(handlers)
             UI.Spacer(),
             self.settingsButton,
             self.pauseButton,
+            self.homeButton,
         },
     }
 
