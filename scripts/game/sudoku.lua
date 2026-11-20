@@ -27,7 +27,7 @@ Sudoku.DIFFICULTIES = {
         key = "easy", label = "简单",
         givens = 48, minGivens = 45, maxGivens = 52,
         minLevel = 1, maxLevel = 1,
-        hintLimit = 5, -- 本档可用提示次数（0 = 不限）
+        hintLimit = 3, -- 各难度统一：本档可用提示次数（0 = 不限）
         desc = "只看候选就能填，不需要任何技巧",
     },
     {
@@ -41,14 +41,14 @@ Sudoku.DIFFICULTIES = {
         key = "hard", label = "困难",
         givens = 33, minGivens = 29, maxGivens = 36,
         minLevel = 3, maxLevel = 3,
-        hintLimit = 2,
+        hintLimit = 3,
         desc = "需要区块排除（指向/声明）",
     },
     {
         key = "expert", label = "专家",
         givens = 28, minGivens = 24, maxGivens = 31,
         minLevel = 4, maxLevel = 4,
-        hintLimit = 1,
+        hintLimit = 3,
         desc = "需要数对等进阶排除",
     },
 }
