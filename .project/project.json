@@ -33,20 +33,24 @@
       "https://img-tc.tapimg.com/market/images/cc6787d36894e17f8211b4a895c9c98d.png",
       "https://img-tc.tapimg.com/market/images/6754a115016cd24241854ca8f4574f9b.png"
     ],
-    "cover_vertical": "./_uploads/fc79d5b5aa9f424bf996acdd48ba49d391a2e0a4c873f9d51116c507c4cb632f.png",
-    "cover_vertical_url": "https://img-tc.tapimg.com/market/images/FgcPV7AHE-F_81emjhY1Yg3aMQ2K.png",
-    "cover_horizontal": "./_uploads/e3bc2c289a3d85da2626d77ed9ce60aef4793cd3921a69a89b7d7bf165c37b4b.png",
-    "cover_horizontal_url": "https://img-tc.tapimg.com/market/images/Fq69nIInHLv4ZUpsMSTgGLTOsHXc.png",
-    "square_promotional_image": "./_uploads/81222d0948d257dd9512e90a31116a786f18db245e53afae8dbd6585675b3cb9.png",
-    "square_promotional_image_url": "https://img-tc.tapimg.com/market/images/FsZD4uCnOcWcsq0w6lEP8HMAN0tp.png",
-    "promotional_image_url": "https://img-tc.tapimg.com/market/images/15a1be1cfa20495b9a6d92d74c4a3f75.png"
+    "cover_vertical_url": "https://img-tc.tapimg.com/market/images/a64c64021e32453a43671f80c48eb1b1.jpg",
+    "cover_horizontal_url": "https://img-tc.tapimg.com/market/images/fa147fa93304c24693ad8535464af6f4.jpg",
+    "square_promotional_image_url": "https://img-tc.tapimg.com/market/images/1da259208649e1a21963d832a91e618d.png",
+    "promotional_image_url": "https://img-tc.tapimg.com/market/images/d9d16ca59d29be6ef264aa1fe61717b1.png"
   },
   "metadata": {
-    "updated_at": "2026-10-31T05:59:34.570Z"
+    "updated_at": "2026-11-20T03:41:06.941Z"
   },
   "test_qrcode": {
-    "url": "https://tapcode-sce.spark.xd.com/qrcode/m_1d8f_1793425029004.png",
-    "generated_at": "2026-10-31T05:37:09.146Z"
+    "url": "https://img-tc.tapimg.com/market/images/FnWj7-3Ohh0WGYwgdhstziX5P5jJ.png",
+    "generated_at": "2026-11-20T03:41:06.941Z",
+    "pending_upload": null,
+    "preview_url": "https://www.taptap.cn/qrcode/miniapp?id=tapmcnb6kejwswpr0o&type=develop&version_id=522951",
+    "mode": "develop",
+    "game_version": "1.0.8",
+    "map_version": "9",
+    "version_id": "522951",
+    "miniapp_id": "tapmcnb6kejwswpr0o"
   },
   "dc_publish_sync": {
     "synced": true,
