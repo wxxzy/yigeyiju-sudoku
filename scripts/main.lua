@@ -167,25 +167,7 @@ function BuildUI()
             RefreshAll()
         end,
         onHint = function()
-            if hud_:isModalOpen() then
-                return
-            end
-            -- 第一次点：标出可确定的格并说明理由；再点一次才填入
-            if board_.hintIdx then
-                local idx = board_.hintIdx
-                board_:applyHint()
-                boardView_:flash(idx, "hint")
-                Sfx.play("place")
-                RefreshAll()
-                return
-            end
-            local step = board_:requestHint()
-            if step then
-                hud_:toast("提示：" .. step.reason .. "（再点一次「提示」直接填入）", 3.5)
-            else
-                hud_:toast("当前盘面没有能一步确定的格子，试试打开候选数或换个角度", 3.5)
-            end
-            RefreshAll()
+            DoHint()
         end,
         onCandidates = function()
             if hud_:isModalOpen() then
@@ -509,6 +491,38 @@ local function HasProgress()
     return board_.started and not board_.solved and not board_.failed
 end
 
+--- 提示入口（键盘 H 与工具键共用）：先讲理由，再点一次落笔。
+--- 次数按难度限额（sudoku.DIFFICULTIES 的 hintLimit），用完弹 toast 拒绝
+function DoHint()
+    if hud_ and hud_:isModalOpen() then
+        return
+    end
+
+    if board_:hintsLeft() <= 0 then
+        hud_:toast("「" .. difficultyLabel(board_.difficulty) .. "」的提示已用完（"
+            .. tostring(board_.hintLimit) .. " 次）", 3)
+        return
+    end
+
+    -- 第一次点：标出可确定的格并说明理由；再点一次才填入
+    if board_.hintIdx then
+        local idx = board_.hintIdx
+        board_:applyHint()
+        boardView_:flash(idx, "hint")
+        Sfx.play("place")
+        RefreshAll()
+        return
+    end
+
+    local step = board_:requestHint()
+    if step then
+        hud_:toast("提示：" .. step.reason .. "（再点一次「提示」直接填入）", 3.5)
+    else
+        hud_:toast("当前盘面没有能一步确定的格子，试试打开候选数或换个角度", 3.5)
+    end
+    RefreshAll()
+end
+
 --- 回到主菜单（暂停 / 结算 / 失败弹层共用）：先落盘，再清理弹层与暂停态
 function GoHome()
     if HasProgress() then
@@ -807,7 +821,8 @@ function HandleKeyDown(eventType, eventData)
     elseif key == KEY_N then
         board_:toggleNotesMode()
     elseif key == KEY_H then
-        board_:hint()
+        DoHint()
+        return
     elseif key == KEY_U then
         board_:undo()
     elseif key == KEY_R then

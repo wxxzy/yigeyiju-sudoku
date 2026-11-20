@@ -807,9 +807,17 @@ end
 function HUD:showResult(board, ctx)
     ctx = ctx or {}
     self.resultTimeLabel:SetText("用时 " .. board:timeText())
+
+    local hintLimit = math.floor(tonumber(board.hintLimit) or 0)
+    local hintPart
+    if hintLimit > 0 then
+        hintPart = "提示 " .. board.hintsUsed .. "/" .. hintLimit .. " 次"
+    else
+        hintPart = "提示 " .. board.hintsUsed .. " 次"
+    end
     self.resultDetailLabel:SetText(
         difficultyLabel(board.difficulty)
-            .. " · 错误 " .. board.mistakes .. " 次 · 提示 " .. board.hintsUsed .. " 次"
+            .. " · 错误 " .. board.mistakes .. " 次 · " .. hintPart
     )
 
     if ctx.isRecord then

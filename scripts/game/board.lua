@@ -65,6 +65,7 @@ function Board:reset(difficulty, opts)
     self.elapsed = 0
     self.started = false
     self.hintsUsed = 0
+    self.hintLimit = Sudoku.configOf(self.difficulty).hintLimit or 0 -- 本局提示上限（0 = 不限）
     self.notesMode = false
     self.solved = false
     self.lastAction = nil -- "place" | "wrong" | "erase" | "hint" | "note"，给表现层做反馈
@@ -264,7 +265,7 @@ end
 
 --- 提示：填对当前格；当前格不可用时找任意空格补一个
 function Board:hint()
-    if self.solved then
+    if self.solved or self:hintsLeft() <= 0 then
         return false
     end
     local idx = self.selected
@@ -312,10 +313,21 @@ function Board:autoCandidates()
 end
 
 --- 求「下一步」：只找唯一候选 / 唯一位置，不直接填
---- 同一格再点一次才会填入（见 main 的提示流程）
+--- 剩余可用提示次数（hintLimit <= 0 视为不限，返回大数兜底）
+function Board:hintsLeft()
+    local limit = math.floor(tonumber(self.hintLimit) or 0)
+    if limit <= 0 then
+        return 99
+    end
+    return math.max(0, limit - self.hintsUsed)
+end
+
+--- 求下一步提示（两段式的第一步）：只标格和给理由，不落笔。
+--- 次数用尽即拒绝；同一格再点一次才会填入（见 main 的提示流程）
 ---@return table|nil { idx, value, level, reason }
 function Board:requestHint()
-    if self.solved then
+    if self.solved or self:hintsLeft() <= 0 then
+        self:clearHint()
         return nil
     end
     local step = Rating.nextStep(self.values)
@@ -507,6 +519,7 @@ function Board:restore(data)
     self.mistakes = math.max(0, math.floor(tonumber(data.mistakes) or 0))
     self.elapsed = math.max(0, tonumber(data.elapsed) or 0)
     self.hintsUsed = math.max(0, math.floor(tonumber(data.hints) or 0))
+    self.hintLimit = Sudoku.configOf(self.difficulty).hintLimit or 0 -- 限额随难度，不随存档
     self.selected = (type(data.selected) == "number" and data.selected >= 1 and data.selected <= Sudoku.CELLS)
         and data.selected
         or nil

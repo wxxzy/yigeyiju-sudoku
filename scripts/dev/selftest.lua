@@ -270,6 +270,15 @@ local function run()
         check(hintBoard.hintIdx == nil, "填入后没有清掉提示标记")
     end
 
+    -- 7.5) 提示限额：次数用尽后两个入口都要拒绝
+    check(hintBoard.hintLimit > 0, "easy 档应配置提示上限")
+    hintBoard.hintsUsed = hintBoard.hintLimit
+    check(hintBoard:hintsLeft() <= 0, "用尽后 hintsLeft 应为 0")
+    check(hintBoard:requestHint() == nil, "用尽后 requestHint 应拒绝")
+    check(hintBoard:hint() == false, "用尽后直接提示也应拒绝")
+    hintBoard.hintsUsed = 0
+    check(hintBoard:hintsLeft() == hintBoard.hintLimit, "重置已用次数后剩余额度应回满")
+
     -- 8) 自动候选：给的候选里不能包含与已填数字冲突的数
     local cands = hintBoard:autoCandidates()
     for i = 1, 81 do

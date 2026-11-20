@@ -78,6 +78,21 @@ function Keypad.new(handlers)
         end,
     }
 
+    self.hintButton = UI.Button {
+        text = "提示",
+        flex = 1,
+        height = S.toolHeight,
+        fontSize = F.body,
+        backgroundColor = C.surfaceMuted,
+        hoverBackgroundColor = C.accentSoft,
+        pressedBackgroundColor = C.accentSoft,
+        textColor = C.textSecondary,
+        borderRadius = 8,
+        onClick = function()
+            handlers.onHint()
+        end,
+    }
+
     local toolRow = UI.Panel {
         width = "100%",
         flexDirection = "row",
@@ -113,20 +128,7 @@ function Keypad.new(handlers)
             },
             self.notesButton,
             self.candidatesButton,
-            UI.Button {
-                text = "提示",
-                flex = 1,
-                height = S.toolHeight,
-                fontSize = F.body,
-                backgroundColor = C.surfaceMuted,
-                hoverBackgroundColor = C.accentSoft,
-                pressedBackgroundColor = C.accentSoft,
-                textColor = C.textSecondary,
-                borderRadius = 8,
-                onClick = function()
-                    handlers.onHint()
-                end,
-            },
+            self.hintButton,
         },
     }
 
@@ -196,6 +198,19 @@ function Keypad:update(board)
     self.candidatesButton:SetStyle {
         backgroundColor = board.showCandidates and C.accentSoft or C.surfaceMuted,
         textColor = board.showCandidates and C.accent or C.textSecondary,
+    }
+
+    -- 提示按钮：显示剩余次数，用尽置灰但不禁用（点了由 main 弹 toast 说明）
+    local hintsLeft = 99
+    if type(board.hintsLeft) == "function" then
+        hintsLeft = board:hintsLeft()
+    end
+    local hintExhausted = hintsLeft <= 0
+    self.hintButton:SetText(hintExhausted and "提示 0" or ("提示 " .. tostring(hintsLeft)))
+    self.hintButton:SetStyle {
+        opacity = hintExhausted and 0.45 or 1,
+        backgroundColor = C.surfaceMuted,
+        textColor = hintExhausted and C.textMuted or C.textSecondary,
     }
 end
 
