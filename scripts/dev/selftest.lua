@@ -279,6 +279,21 @@ local function run()
     hintBoard.hintsUsed = 0
     check(hintBoard:hintsLeft() == hintBoard.hintLimit, "重置已用次数后剩余额度应回满")
 
+    -- 7.6) 广告奖励提示：bonus 池发放与抵扣
+    hintBoard.hintsUsed = hintBoard.hintLimit
+    check(hintBoard:hintsLeft() <= 0, "额度应已用尽")
+    check(hintBoard:grantBonusHint() == 1, "广告奖励后剩余应为 1")
+    local bstep = hintBoard:requestHint()
+    check(bstep ~= nil, "有奖励次数时应能请求提示")
+    if bstep then
+        check(hintBoard:applyHint() == true, "奖励提示应能填入")
+        check(hintBoard.hintsUsed == hintBoard.hintLimit + 1, "奖励提示应累计已用次数")
+        check(hintBoard.bonusHints == 0, "奖励次数使用后应被抵扣")
+        check(hintBoard:hintsLeft() <= 0, "奖励消耗完应回到用尽状态")
+    end
+    hintBoard.hintsUsed = 0
+    hintBoard.bonusHints = 0
+
     -- 8) 自动候选：给的候选里不能包含与已填数字冲突的数
     local cands = hintBoard:autoCandidates()
     for i = 1, 81 do

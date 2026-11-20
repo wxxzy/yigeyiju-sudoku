@@ -18,6 +18,7 @@ local Daily = require "game.daily"
 local Settings = require "game.settings"
 local Sfx = require "game.sfx"
 local Storage = require "game.storage"
+local Ad = require "game.ad"
 local BoardView = require "ui.board_view"
 local Keypad = require "ui.keypad"
 local HUD = require "ui.hud"
@@ -492,15 +493,14 @@ local function HasProgress()
 end
 
 --- 提示入口（键盘 H 与工具键共用）：先讲理由，再点一次落笔。
---- 次数按难度限额（sudoku.DIFFICULTIES 的 hintLimit），用完弹 toast 拒绝
+--- 次数按难度限额（sudoku.DIFFICULTIES 的 hintLimit），用完可看广告补充
 function DoHint()
     if hud_ and hud_:isModalOpen() then
         return
     end
 
     if board_:hintsLeft() <= 0 then
-        hud_:toast("「" .. difficultyLabel(board_.difficulty) .. "」的提示已用完（"
-            .. tostring(board_.hintLimit) .. " 次）", 3)
+        ShowHintAdOffer()
         return
     end
 
@@ -521,6 +521,55 @@ function DoHint()
         hud_:toast("当前盘面没有能一步确定的格子，试试打开候选数或换个角度", 3.5)
     end
     RefreshAll()
+end
+
+--- 提示用尽时：提供「看广告 +1」入口；环境不支持广告则退回纯提示
+function ShowHintAdOffer()
+    if not Ad.isSupported() then
+        hud_:toast("「" .. difficultyLabel(board_.difficulty) .. "」的提示已用完（"
+            .. tostring(board_.hintLimit) .. " 次）", 3)
+        return
+    end
+
+    hud_:showConfirm("观看一段视频广告，可获得 1 次提示。", {
+        title = "提示用完了",
+        confirmText = "看广告 +1",
+        cancelText = "先不用",
+        onConfirm = function()
+            WatchAdForHint()
+        end,
+    })
+end
+
+--- 播放激励视频：完整观看才 +1 次提示（成功后直接给出这一步的指引）
+function WatchAdForHint()
+    local accepted = Ad.showRewarded(function(success, msg)
+        if not success then
+            -- "embed manual close"：iOS 嵌入式下未看完就手动关闭，不发奖
+            if msg == "embed manual close" then
+                hud_:toast("需完整观看广告才能获得提示", 3)
+            else
+                hud_:toast("广告未完成："
+                    .. (type(msg) == "string" and msg ~= "" and msg or "稍后再试"), 3)
+            end
+            RefreshAll()
+            return
+        end
+
+        board_:grantBonusHint()
+        local step = board_:requestHint()
+        if step then
+            hud_:toast("提示 +1：" .. step.reason .. "（再点一次「提示」直接填入）", 4)
+        else
+            hud_:toast("提示 +1（当前盘面暂时没有能一步确定的格子）", 3)
+        end
+        saveDirty_ = true
+        RefreshAll()
+    end)
+
+    if not accepted then
+        hud_:toast("广告暂不可用，稍后再试", 2.5)
+    end
 end
 
 --- 回到主菜单（暂停 / 结算 / 失败弹层共用）：先落盘，再清理弹层与暂停态

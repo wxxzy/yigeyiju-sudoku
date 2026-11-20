@@ -295,8 +295,14 @@ function HUD.new(handlers)
     }
 
     -- ---------------------------------------------------------------------
-    -- 确认弹层（开新局会丢进度时使用）
+    -- 确认弹层（开新局会丢进度 / 广告换提示等通用二选一）
     -- ---------------------------------------------------------------------
+    self.confirmTitleLabel = UI.Label {
+        text = "开新局？",
+        fontSize = 18,
+        fontColor = C.textPrimary,
+    }
+
     self.confirmMessageLabel = UI.Label {
         text = "",
         fontSize = F.small,
@@ -304,6 +310,28 @@ function HUD.new(handlers)
         textAlign = "center",
         whiteSpace = "normal",
         width = "100%",
+    }
+
+    -- 确认按钮：文案与确认回调由 showConfirm(message, opts) 动态设置
+    self.confirmButton = UI.Button {
+        text = "开新局",
+        flex = 1,
+        height = 40,
+        fontSize = F.small,
+        variant = "primary",
+        backgroundColor = C.accent,
+        hoverBackgroundColor = C.accentPressed,
+        pressedBackgroundColor = C.accentPressed,
+        textColor = C.surface,
+        onClick = function()
+            self.confirmOverlay:SetVisible(false)
+            local action = self.confirmAction_
+            if action then
+                action()
+            else
+                handlers.onConfirmNewGame()
+            end
+        end,
     }
 
     self.confirmOverlay = UI.Panel {
@@ -325,11 +353,7 @@ function HUD.new(handlers)
                 backgroundColor = C.surface,
                 borderRadius = 16,
                 children = {
-                    UI.Label {
-                        text = "开新局？",
-                        fontSize = 18,
-                        fontColor = C.textPrimary,
-                    },
+                    self.confirmTitleLabel,
                     self.confirmMessageLabel,
                     UI.Panel {
                         width = "100%",
@@ -350,21 +374,7 @@ function HUD.new(handlers)
                                     self.confirmOverlay:SetVisible(false)
                                 end,
                             },
-                            UI.Button {
-                                text = "开新局",
-                                flex = 1,
-                                height = 40,
-                                fontSize = F.small,
-                                variant = "primary",
-                        backgroundColor = C.accent,
-                        hoverBackgroundColor = C.accentPressed,
-                        pressedBackgroundColor = C.accentPressed,
-                        textColor = C.surface,
-                                onClick = function()
-                                    self.confirmOverlay:SetVisible(false)
-                                    handlers.onConfirmNewGame()
-                                end,
-                            },
+                            self.confirmButton,
                         },
                     },
                 },
@@ -855,10 +865,15 @@ function HUD:hideResult()
     self.overlay:SetVisible(false)
 end
 
---- 开新局前的二次确认
----@param message string
-function HUD:showConfirm(message)
+--- 二选一确认弹层（不传 opts 时保持原「开新局」行为）
+---@param message string 正文
+---@param opts table|nil { title, confirmText, cancelText, onConfirm }
+function HUD:showConfirm(message, opts)
+    opts = opts or {}
+    self.confirmTitleLabel:SetText(opts.title or "开新局？")
     self.confirmMessageLabel:SetText(message or "")
+    self.confirmButton:SetText(opts.confirmText or "开新局")
+    self.confirmAction_ = opts.onConfirm -- nil 时确认按钮走默认的 onConfirmNewGame
     self.confirmOverlay:SetVisible(true)
 end
 

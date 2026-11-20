@@ -66,6 +66,7 @@ function Board:reset(difficulty, opts)
     self.started = false
     self.hintsUsed = 0
     self.hintLimit = Sudoku.configOf(self.difficulty).hintLimit or 0 -- 本局提示上限（0 = 不限）
+    self.bonusHints = 0 -- 广告奖励的额外提示次数（超出基础额度时自动抵扣）
     self.notesMode = false
     self.solved = false
     self.lastAction = nil -- "place" | "wrong" | "erase" | "hint" | "note"，给表现层做反馈
@@ -285,7 +286,7 @@ function Board:hint()
     self.notes[idx] = {}
     self.wrong[idx] = false
     self.selected = idx
-    self.hintsUsed = self.hintsUsed + 1
+    self:spendHint()
     self.lastAction = "hint"
     self:checkSolved()
     return true
@@ -314,12 +315,30 @@ end
 
 --- 求「下一步」：只找唯一候选 / 唯一位置，不直接填
 --- 剩余可用提示次数（hintLimit <= 0 视为不限，返回大数兜底）
+--- 额度 = 基础上限 - 已用 + 广告奖励池
 function Board:hintsLeft()
     local limit = math.floor(tonumber(self.hintLimit) or 0)
     if limit <= 0 then
         return 99
     end
-    return math.max(0, limit - self.hintsUsed)
+    local bonus = math.max(0, math.floor(tonumber(self.bonusHints) or 0))
+    return math.max(0, limit - self.hintsUsed + bonus)
+end
+
+--- 广告奖励：额外 +1 次提示
+---@return integer 发放后的剩余次数
+function Board:grantBonusHint()
+    self.bonusHints = self.bonusHints + 1
+    return self:hintsLeft()
+end
+
+--- 记一次提示消耗；已用超过基础上限时自动抵扣奖励池
+function Board:spendHint()
+    self.hintsUsed = self.hintsUsed + 1
+    local limit = math.floor(tonumber(self.hintLimit) or 0)
+    if limit > 0 and self.hintsUsed > limit and self.bonusHints > 0 then
+        self.bonusHints = self.bonusHints - 1
+    end
 end
 
 --- 求下一步提示（两段式的第一步）：只标格和给理由，不落笔。
@@ -355,7 +374,7 @@ function Board:applyHint()
     self.values[idx] = step.value
     self.notes[idx] = {}
     self.wrong[idx] = false
-    self.hintsUsed = self.hintsUsed + 1
+    self:spendHint()
     self.lastAction = "hint"
     self:clearHint()
     self:checkSolved()
@@ -456,6 +475,7 @@ function Board:serialize()
         mistakes = self.mistakes,
         elapsed = math.floor(self.elapsed),
         hints = self.hintsUsed,
+        bonus = self.bonusHints, -- 广告奖励的剩余提示次数，随存档延续
         solved = self.solved and 1 or 0,
         selected = self.selected or 0,
         daily = self.dailyKey or "",
@@ -520,6 +540,7 @@ function Board:restore(data)
     self.elapsed = math.max(0, tonumber(data.elapsed) or 0)
     self.hintsUsed = math.max(0, math.floor(tonumber(data.hints) or 0))
     self.hintLimit = Sudoku.configOf(self.difficulty).hintLimit or 0 -- 限额随难度，不随存档
+    self.bonusHints = math.max(0, math.floor(tonumber(data.bonus) or 0))
     self.selected = (type(data.selected) == "number" and data.selected >= 1 and data.selected <= Sudoku.CELLS)
         and data.selected
         or nil
