@@ -43,7 +43,7 @@ local function difficultyLabel(key)
     return "普通"
 end
 
----@param handlers table { onNewGame, onCycleDifficulty, onConfirmNewGame }
+---@param handlers table { onNewGame, onCycleDifficulty, onConfirmNewGame, onDaily, onPause, onResume, onSettings, onToggleSound, onToggleAutoClean, onCycleFont, onCycleLimit, onRetry, onHome }
 function HUD.new(handlers)
     local self = setmetatable({ lastTimeText = "" }, HUD)
 
@@ -254,6 +254,21 @@ function HUD.new(handlers)
                         borderRadius = 8,
                         onClick = function()
                             self.overlay:SetVisible(false)
+                        end,
+                    },
+                    UI.Button {
+                        text = "回到主界面",
+                        width = "100%",
+                        height = 38,
+                        fontSize = F.small,
+                        backgroundColor = C.surfaceMuted,
+                        hoverBackgroundColor = C.accentSoft,
+                        pressedBackgroundColor = C.accentSoft,
+                        textColor = C.textSecondary,
+                        borderRadius = 8,
+                        onClick = function()
+                            self.overlay:SetVisible(false)
+                            handlers.onHome()
                         end,
                     },
                 },
@@ -521,6 +536,21 @@ function HUD.new(handlers)
                             self.failOverlay:SetVisible(false)
                         end,
                     },
+                    UI.Button {
+                        text = "回到主界面",
+                        width = "100%",
+                        height = 36,
+                        fontSize = F.small,
+                        backgroundColor = C.surfaceMuted,
+                        hoverBackgroundColor = C.accentSoft,
+                        pressedBackgroundColor = C.accentSoft,
+                        textColor = C.textSecondary,
+                        borderRadius = 8,
+                        onClick = function()
+                            self.failOverlay:SetVisible(false)
+                            handlers.onHome()
+                        end,
+                    },
                 },
             },
         },
@@ -569,6 +599,21 @@ function HUD.new(handlers)
                         textColor = C.surface,
                         onClick = function()
                             handlers.onResume()
+                        end,
+                    },
+                    UI.Button {
+                        text = "回到主界面",
+                        width = "100%",
+                        height = 36,
+                        fontSize = F.small,
+                        backgroundColor = C.surfaceMuted,
+                        hoverBackgroundColor = C.accentSoft,
+                        pressedBackgroundColor = C.accentSoft,
+                        textColor = C.textSecondary,
+                        borderRadius = 8,
+                        onClick = function()
+                            self.pauseOverlay:SetVisible(false)
+                            handlers.onHome()
                         end,
                     },
                 },

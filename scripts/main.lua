@@ -21,6 +21,7 @@ local Storage = require "game.storage"
 local BoardView = require "ui.board_view"
 local Keypad = require "ui.keypad"
 local HUD = require "ui.hud"
+local TitleView = require "ui.title_view"
 local Theme = require "ui.theme"
 
 local CONFIG = {
@@ -36,10 +37,12 @@ local board_ = nil
 local boardView_ = nil
 local keypad_ = nil
 local hud_ = nil
+local titleView_ = nil
 local root_ = nil
 local boardArea_ = nil
 local resultShown_ = false
 local pendingDaily_ = false -- 确认框点「开新局」时，是否要开每日一题
+local scene_ = "title" -- 当前场景："title" 主菜单 / "game" 对局界面
 
 -- 待开局难度（难度按钮改的是它，真正开局要按「新局」并确认）
 local pendingDifficulty_ = CONFIG.Difficulty
@@ -83,6 +86,7 @@ function Start()
             n = n + 1
         end
         RefreshDailyButton()
+        RefreshTitleInfo()
         print("=== 已载入历史成绩：" .. n .. " 档，累计通关 "
             .. tostring(Records.clearedCount(records_)) .. " 局 ===")
     end)
@@ -107,6 +111,7 @@ function Start()
             hud_:setPendingMismatch(false)
             resultShown_ = board_.solved
             RefreshAll()
+            RefreshTitleInfo()
             print("=== 续上次进度：" .. board_.difficulty
                 .. "，空格 " .. board_:emptyCount() .. "，用时 " .. board_:timeText() .. " ===")
         end
@@ -116,6 +121,7 @@ function Start()
     RefreshDailyButton()
     RefreshAll()
     FitBoard()
+    ShowTitle() -- 开局先进主菜单，点难度 / 继续才进对局
 
     SubscribeToEvent("Update", "HandleUpdate")
     SubscribeToEvent("KeyDown", "HandleKeyDown")
@@ -246,6 +252,24 @@ function BuildUI()
         onRetry = function()
             StartNewGame(pendingDifficulty_)
         end,
+        onHome = function()
+            GoHome()
+        end,
+    }
+
+    titleView_ = TitleView.new {
+        onStart = function(difficulty)
+            StartNewGame(difficulty)
+        end,
+        onContinue = function()
+            EnterGame()
+        end,
+        onDaily = function()
+            StartDaily()
+        end,
+        onSettings = function()
+            hud_:showSettings()
+        end,
     }
 
     -- 棋盘容器：占满顶栏与键盘之间的剩余空间，实际边长由 FitBoard 按空间算出
@@ -285,6 +309,8 @@ function BuildUI()
                     },
                 },
             },
+            -- 主菜单全屏覆盖层：在设置弹层之下，从主菜单可直接打开设置
+            titleView_.root,
             hud_.overlay,
             hud_.confirmOverlay,
             hud_.pauseOverlay,
@@ -478,9 +504,57 @@ local function difficultyLabel(key)
     return "普通"
 end
 
---- 当前盘面是否值得保护（已经开始且没通关）
+--- 当前盘面是否值得保护（已经开始且没通关 / 没判负）
 local function HasProgress()
-    return board_.started and not board_.solved
+    return board_.started and not board_.solved and not board_.failed
+end
+
+--- 回到主菜单（暂停 / 结算 / 失败弹层共用）：先落盘，再清理弹层与暂停态
+function GoHome()
+    if HasProgress() then
+        SaveProgress()
+    end
+    hud_:hideResult()
+    hud_:hideConfirm()
+    hud_:hideFail()
+    if board_:isPaused() then
+        board_:togglePause()
+    end
+    hud_:setPaused(false, board_:timeText())
+    ShowTitle()
+end
+
+--- 显示主菜单
+function ShowTitle()
+    scene_ = "title"
+    RefreshTitleInfo()
+    titleView_:show()
+end
+
+--- 进入对局界面（幂等：已在对局中重复调用无副作用）
+function EnterGame()
+    scene_ = "game"
+    titleView_:hide()
+end
+
+--- 主菜单信息：继续按钮 / 打卡状态 / 成绩概览
+function RefreshTitleInfo()
+    if not titleView_ then
+        return
+    end
+
+    if HasProgress() then
+        titleView_:setContinueInfo(true, "继续上局 · " .. difficultyLabel(board_.difficulty)
+            .. " · 用时 " .. board_:timeText())
+    else
+        titleView_:setContinueInfo(false)
+    end
+
+    local key = Daily.today()
+    local daily = records_.daily
+    local streak = (type(daily) == "table" and tonumber(daily.streak)) or 0
+    titleView_:setDailyInfo(streak, key ~= nil and Daily.doneToday(daily, key) or false)
+    titleView_:setStats(Records.clearedCount(records_), streak, records_.best)
 end
 
 --- 难度按钮：只切换待开局难度，不碰当前盘
@@ -508,9 +582,9 @@ function StartDaily()
         return
     end
 
-    -- 已经在做今天的每日题：不重开，避免手快冲掉进度
+    -- 已经在做今天的每日题：不重开，直接回到那一局
     if board_.dailyKey == key and HasProgress() then
-        hud_:toast("今天的每日一题正在进行中", 2.5)
+        EnterGame()
         return
     end
 
@@ -543,6 +617,7 @@ function BeginDaily(key)
     hud_:setPendingMismatch(false)
     RefreshDailyButton()
     RefreshAll()
+    EnterGame()
 
     if Daily.doneToday(records_.daily, key) then
         hud_:toast("今天的每日已打卡，这局不计入连续天数", 3.5)
@@ -588,6 +663,7 @@ function StartNewGame(difficulty)
     hud_:setDifficulty(pendingDifficulty_)
     hud_:setPendingMismatch(false)
     RefreshAll()
+    EnterGame()
     print("=== 新局：" .. pendingDifficulty_ .. "，空格 " .. board_:emptyCount() .. " ===")
 end
 
@@ -612,7 +688,10 @@ end
 function HandleUpdate(eventType, eventData)
     local dt = eventData["TimeStep"]:GetFloat()
 
-    board_:tick(dt)
+    -- 主菜单场景下不计时：棋盘被盖住，也没有任何输入
+    if scene_ == "game" then
+        board_:tick(dt)
+    end
     boardView_:update(dt)
     Sfx.tick(dt)
     hud_:update(board_, dt)
@@ -695,6 +774,11 @@ local DIGIT_KEYS = {
 ---@param eventData KeyDownEventData
 function HandleKeyDown(eventType, eventData)
     local key = eventData["Key"]:GetInt()
+
+    -- 主菜单场景：键盘快捷键全部不响应，避免误触开局
+    if scene_ == "title" then
+        return
+    end
 
     if hud_ and hud_:isModalOpen() then
         -- 暂停遮罩下仍然允许键盘继续，避免只能用鼠标/手指
