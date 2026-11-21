@@ -36,6 +36,11 @@ local function cloud()
     return nil
 end
 
+--- 云存档能力是否就绪（供 UI 显示同步状态；与读写共享同一判定）
+function Storage.isCloudAvailable()
+    return cloud() ~= nil
+end
+
 --- 只接受数字，且排除 nan / inf（本引擎 nan 的比较行为不可靠，用字符串判定）
 local function isFiniteNumber(v)
     if type(v) ~= "number" then

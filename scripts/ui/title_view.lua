@@ -109,6 +109,14 @@ function TitleView.new(handlers)
         width = "100%",
     }
 
+    self.saveInfoLabel = UI.Label {
+        text = "",
+        fontSize = F.tiny,
+        fontColor = C.textMuted,
+        textAlign = "center",
+        width = "100%",
+    }
+
     self.root = UI.Panel {
         position = "absolute",
         top = 0,
@@ -150,6 +158,7 @@ function TitleView.new(handlers)
                     self.settingsButton,
                     UI.Panel { height = 6 },
                     self.statsLabel,
+                    self.saveInfoLabel,
                     UI.Label {
                         text = "无弹窗打扰 · 竖屏单手可玩",
                         fontSize = F.tiny,
@@ -211,6 +220,14 @@ function TitleView:setStats(cleared, streak, best)
     lines[#lines + 1] = cells[3] .. " · " .. cells[4]
 
     self.statsLabel:SetText(table.concat(lines, "\n"))
+end
+
+--- 存档模式说明：云同步状态对玩家可见
+---@param text string 空字符串时隐藏
+function TitleView:setSaveInfo(text)
+    local t = text or ""
+    self.saveInfoLabel:SetText(t)
+    self.saveInfoLabel:SetVisible(t ~= "")
 end
 
 function TitleView:show()

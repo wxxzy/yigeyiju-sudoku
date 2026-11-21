@@ -56,6 +56,7 @@ local layoutTimer_ = 0
 local autosaveTimer_ = 0
 local saveDirty_ = false
 local layoutWarned_ = false
+local saveFailToastShown_ = false -- 云写失败只 toast 一次，之后静默重试
 
 -- ============================================================================
 -- 生命周期
@@ -467,6 +468,13 @@ function SaveProgress(onDone)
         else
             saveDirty_ = true -- 失败就保持脏标记，下次继续尝试
             print("[Save] 存档写入失败，稍后重试")
+            -- 首次失败给玩家一个可见提示（之后静默重试，避免刷屏）
+            if not saveFailToastShown_ then
+                saveFailToastShown_ = true
+                if hud_ then
+                    hud_:toast("云同步失败，进度暂存本机，稍后自动重试", 3)
+                end
+            end
             if onDone then
                 onDone(false, source)
             end
@@ -600,7 +608,7 @@ function EnterGame()
     titleView_:hide()
 end
 
---- 主菜单信息：继续按钮 / 打卡状态 / 成绩概览
+--- 主菜单信息：继续按钮 / 打卡状态 / 成绩概览 / 存档模式
 function RefreshTitleInfo()
     if not titleView_ then
         return
@@ -618,6 +626,12 @@ function RefreshTitleInfo()
     local streak = (type(daily) == "table" and tonumber(daily.streak)) or 0
     titleView_:setDailyInfo(streak, key ~= nil and Daily.doneToday(daily, key) or false)
     titleView_:setStats(Records.clearedCount(records_), streak, records_.best)
+
+    if Storage.isCloudAvailable() then
+        titleView_:setSaveInfo("云存档已开启 · 进度按 TapTap 账号同步")
+    else
+        titleView_:setSaveInfo("本地存档模式（未连接云存档）")
+    end
 end
 
 --- 难度按钮：只切换待开局难度，不碰当前盘
@@ -710,6 +724,10 @@ function TogglePause()
     end
     local paused = board_:togglePause()
     hud_:setPaused(paused, board_:timeText())
+    -- 暂停是明确的安全点：切后台前大概率会先暂停，这里立即落一次盘
+    if paused and saveDirty_ then
+        SaveProgress()
+    end
 end
 
 ---@param difficulty string
