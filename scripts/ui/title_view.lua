@@ -141,6 +141,23 @@ function TitleView.new(handlers)
         fontColor = C.textPrimary,
     }
 
+    self.dailyBoardButton = UI.Button {
+        text = "每日一题榜",
+        width = "100%",
+        height = 42,
+        fontSize = F.body,
+        variant = "primary",
+        backgroundColor = C.accent,
+        hoverBackgroundColor = C.accentPressed,
+        pressedBackgroundColor = C.accentPressed,
+        textColor = C.surface,
+        borderRadius = 10,
+        visible = false, -- 平台每日榜可用时才显示（main 决定）
+        onClick = function()
+            handlers.onDailyBoard()
+        end,
+    }
+
     self.rankTabs = {}
     local tabRow = UI.Panel {
         width = "100%",
@@ -238,6 +255,7 @@ function TitleView.new(handlers)
         visible = false,
         children = {
             self.rankTitleLabel,
+            self.dailyBoardButton,
             tabRow,
             self.rankListPanel,
             self.rankMyLabel,
@@ -441,6 +459,11 @@ end
 --- 好友榜入口：仅平台能力可用时显示（main 决定）
 function TitleView:setFriendsBoardVisible(visible)
     self.friendsBoardButton:SetVisible(visible == true)
+end
+
+--- 每日一题榜入口：仅平台能力可用时显示（main 决定）
+function TitleView:setDailyBoardVisible(visible)
+    self.dailyBoardButton:SetVisible(visible == true)
 end
 
 function TitleView:show()

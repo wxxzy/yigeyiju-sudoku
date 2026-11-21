@@ -17,24 +17,61 @@ Social.RANK_KEYS = {
     expert = "sudoku_best_expert",
 }
 
--- 平台好友榜的榜单 ID（在开发者中心「游戏服务 → 游戏排行」创建后填入；空 = 不启用）
+-- 平台好友榜的榜单 ID（空 = 不启用）
 Social.PLATFORM_LEADERBOARD_ID = ""
+-- 平台每日一题榜 ID（开发者中心「游戏排行」创建；榜单需配置为升序 + 按日重置 + 保留历史最好成绩）
+Social.DAILY_LEADERBOARD_ID = ""
 
---- 是否有平台排行榜能力（好友榜依赖它；本地/未知环境返回 false）
-function Social.hasPlatformLeaderboard()
-    if not Social.PLATFORM_LEADERBOARD_ID or Social.PLATFORM_LEADERBOARD_ID == "" then
-        return false
-    end
+-- 每日榜罚分系数：有效成绩 = 用时 + 错误×30s + 提示×60s（可调）
+Social.PENALTY_MISTAKE = 30
+Social.PENALTY_HINT = 60
+
+--- 每日榜综合成绩（秒，越小越好）
+function Social.dailyScore(seconds, mistakes, hints)
+    seconds = math.max(0, math.floor(tonumber(seconds) or 0))
+    local m = math.max(0, math.floor(tonumber(mistakes) or 0))
+    local h = math.max(0, math.floor(tonumber(hints) or 0))
+    return seconds + m * Social.PENALTY_MISTAKE + h * Social.PENALTY_HINT
+end
+
+--- 平台排行榜能力探测（好友榜与每日榜共用；tap 全局由真机容器注入）
+local function tapManager()
     local ok, tap = pcall(function()
         return rawget(_G, "tap")
     end)
     if not ok or type(tap) ~= "table" then
-        return false
+        return nil
     end
     local okMgr, mgr = pcall(function()
         return tap:getLeaderboardManager()
     end)
-    return okMgr and mgr ~= nil
+    if okMgr and mgr ~= nil then
+        return mgr
+    end
+    -- 兼容点调用封装
+    local okDot, mgrDot = pcall(function()
+        return tap.getLeaderboardManager(tap)
+    end)
+    if okDot and mgrDot ~= nil then
+        return mgrDot
+    end
+    return nil
+end
+
+--- 是否有平台好友榜能力
+function Social.hasPlatformLeaderboard()
+    if not Social.PLATFORM_LEADERBOARD_ID or Social.PLATFORM_LEADERBOARD_ID == "" then
+        return false
+    end
+    return tapManager() ~= nil
+end
+
+--- 是否有平台每日一题榜能力
+function Social.hasDailyBoard()
+    if not Social.DAILY_LEADERBOARD_ID or Social.DAILY_LEADERBOARD_ID == "" then
+        return false
+    end
+    return tapManager() ~= nil
 end
 
 local function cloud()
@@ -168,17 +205,52 @@ function Social.loadMyRank(difficulty, onDone)
     end
 end
 
+--- 提交每日一题成绩到平台榜（综合成绩秒数，越小越好）
+---@return boolean accepted 是否被受理
+function Social.submitDailyScore(seconds, mistakes, hints)
+    local mgr = tapManager()
+    if not mgr or not Social.hasDailyBoard() then
+        return false
+    end
+    local score = Social.dailyScore(seconds, mistakes, hints)
+    local ok = pcall(function()
+        mgr:submitScores({
+            scores = {
+                { leaderboardId = Social.DAILY_LEADERBOARD_ID, score = score },
+            },
+            callback = {
+                onSuccess = function() end,
+                onFailure = function() end,
+            },
+        })
+    end)
+    return ok == true
+end
+
+--- 调起平台每日一题榜官方 UI 面板
+---@return boolean 是否成功调起
+function Social.showDailyBoard()
+    local mgr = tapManager()
+    if not mgr or not Social.hasDailyBoard() then
+        return false
+    end
+    local ok = pcall(function()
+        mgr:openLeaderboard({
+            leaderboardId = Social.DAILY_LEADERBOARD_ID,
+            callback = {
+                onSuccess = function() end,
+                onFailure = function() end,
+            },
+        })
+    end)
+    return ok == true
+end
+
 --- 打开平台排行榜面板（好友榜：collection = "friends"）
 ---@return boolean 是否成功调起
 function Social.showPlatformLeaderboard(collection)
-    if not Social.hasPlatformLeaderboard() then
-        return false
-    end
-    local tap = rawget(_G, "tap")
-    local ok, mgr = pcall(function()
-        return tap:getLeaderboardManager()
-    end)
-    if not ok or type(mgr) ~= "table" then
+    local mgr = tapManager()
+    if not mgr or not Social.hasPlatformLeaderboard() then
         return false
     end
     return pcall(function()

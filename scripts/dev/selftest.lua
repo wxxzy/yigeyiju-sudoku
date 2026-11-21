@@ -11,6 +11,7 @@ local Daily = require "game.daily"
 local Records = require "game.records"
 local PuzzleBank = require "game.puzzle_bank"
 local Settings = require "game.settings"
+local Social = require "game.social"
 
 local failures = 0
 local checks = 0
@@ -293,6 +294,11 @@ local function run()
     end
     hintBoard.hintsUsed = 0
     hintBoard.bonusHints = 0
+
+    -- 每日榜综合成绩：罚分公式（纯函数，与引擎无关）
+    check(Social.dailyScore(120, 0, 0) == 120, "零罚分时综合成绩应等于用时")
+    check(Social.dailyScore(120, 2, 1) == 120 + 2 * 30 + 60, "错误/提示罚分计算不对")
+    check(Social.dailyScore(-5, -1, -1) == 0, "负值应被钳制为 0")
 
     -- 8) 自动候选：给的候选里不能包含与已填数字冲突的数
     local cands = hintBoard:autoCandidates()

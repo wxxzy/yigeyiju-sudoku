@@ -32,7 +32,8 @@ local CONFIG = {
     LayoutCheckInterval = 0.25, -- 秒：多久重测一次可用空间
     AutosaveInterval = 10, -- 秒：有改动后多久落一次存档
     StatsReserve = 42, -- 棋盘下方成绩条占用（22 高 + 10 间距 + 边框余量）
-    PlatformLeaderboardId = "", -- 平台好友榜 ID（开发者中心创建后填入；空 = 隐藏好友榜入口）
+    PlatformLeaderboardId = "", -- 平台好友榜 ID（空 = 隐藏好友榜入口）
+    DailyLeaderboardId = "dk4e5hcoz5ipga5n4y", -- 平台每日一题榜 ID（需配置为升序+日重置+保留最好成绩）
 }
 
 -- 长生命周期引用（Start/Stop 是全局函数，状态只能放模块级）
@@ -271,10 +272,16 @@ function BuildUI()
                 hud_:toast("好友榜暂不可用，稍后再试", 2.5)
             end
         end,
+        onDailyBoard = function()
+            if not Social.showDailyBoard() then
+                hud_:toast("每日榜暂不可用，稍后再试", 2.5)
+            end
+        end,
     }
 
-    -- 平台好友榜榜单 ID（开发者中心「游戏服务 → 游戏排行」创建后填入；空 = 不启用）
+    -- 平台榜单 ID（好友榜 / 每日一题榜；ID 为空时对应入口自动隐藏）
     Social.PLATFORM_LEADERBOARD_ID = CONFIG.PlatformLeaderboardId or ""
+    Social.DAILY_LEADERBOARD_ID = CONFIG.DailyLeaderboardId or ""
 
     -- 棋盘容器：占满顶栏与键盘之间的剩余空间，实际边长由 FitBoard 按空间算出
     -- 棋盘与其下方的成绩条作为一个整体垂直居中，避免两者被拉开
@@ -681,6 +688,18 @@ function OpenLeaderboard(difficulty)
     end)
 
     titleView_:setFriendsBoardVisible(Social.hasPlatformLeaderboard())
+    titleView_:setDailyBoardVisible(Social.hasDailyBoard())
+end
+
+--- 每日一题通关后提交平台每日榜（综合成绩：用时+错误+提示罚分）
+function SubmitDailyScore()
+    if not board_.dailyKey then
+        return
+    end
+    local accepted = Social.submitDailyScore(board_.elapsed, board_.mistakes, board_.hintsUsed)
+    if accepted then
+        hud_:toast("已提交每日榜成绩（错误与提示会折算罚时）", 3)
+    end
 end
 
 --- 难度按钮：只切换待开局难度，不碰当前盘
@@ -867,6 +886,7 @@ function HandleUpdate(eventType, eventData)
                 .. tostring(streak) .. " 天"
             RefreshDailyButton()
             RefreshStatsBar()
+            SubmitDailyScore() -- 平台每日榜：综合成绩提交（需真机容器支持，失败静默）
         else
             -- 普通局：用时更短才刷新，记录该局的错误次数
             isRecord, prevBest = Records.submit(records_, board_.difficulty, board_.elapsed, board_.mistakes)
