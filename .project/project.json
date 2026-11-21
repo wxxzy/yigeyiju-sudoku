@@ -39,17 +39,17 @@
     "promotional_image_url": "https://img-tc.tapimg.com/market/images/d9d16ca59d29be6ef264aa1fe61717b1.png"
   },
   "metadata": {
-    "updated_at": "2026-11-21T04:23:33.970Z"
+    "updated_at": "2026-11-21T04:50:10.753Z"
   },
   "test_qrcode": {
-    "url": "https://img-tc.tapimg.com/market/images/Fn8eoeGPHnESIB2UzeUkjObIi-Q6.png",
-    "generated_at": "2026-11-21T04:23:33.970Z",
+    "url": "https://img-tc.tapimg.com/market/images/FqhjZ6uPjqrc4vd45HWogLszePFN.png",
+    "generated_at": "2026-11-21T04:50:10.753Z",
     "pending_upload": null,
-    "preview_url": "https://www.taptap.cn/qrcode/miniapp?id=tapmcnb6kejwswpr0o&type=develop&version_id=534784",
+    "preview_url": "https://www.taptap.cn/qrcode/miniapp?id=tapmcnb6kejwswpr0o&type=develop&version_id=535034",
     "mode": "develop",
-    "game_version": "1.0.14",
-    "map_version": "15",
-    "version_id": "534784",
+    "game_version": "1.0.15",
+    "map_version": "16",
+    "version_id": "535034",
     "miniapp_id": "tapmcnb6kejwswpr0o"
   },
   "dc_publish_sync": {
