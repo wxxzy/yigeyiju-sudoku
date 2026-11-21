@@ -1,27 +1,32 @@
--- 临时探测：容器是否向 Lua 暴露平台排行榜（tap 全局）与好友能力
--- 用法: preview validate --entry dev/probe_social.lua --mode validate
-local ok, tapObj = pcall(function()
-    return rawget(_G, "tap")
+-- 探测：真机容器注入的社会/跳转/广告能力清单
+-- 用法：构建测试版 → 真机扫码进入 → 读 runtime.log 里的 [Probe] 行
+local okSdk, sdk = pcall(function()
+    return rawget(_G, "sdk")
 end)
-print("[Probe] _G.tap exists:", tostring(ok), type(tapObj))
-
-if type(tapObj) == "table" then
-    print("[Probe] tap.getLeaderboardManager:", type(tapObj.getLeaderboardManager))
-    local okMgr, mgr = pcall(function()
-        return tapObj:getLeaderboardManager()
-    end)
-    print("[Probe] leaderboardManager:", tostring(okMgr), type(mgr))
-    if type(mgr) == "table" then
-        for _, name in ipairs({ "submitScores", "openLeaderboard", "loadLeaderboardScores", "loadCurrentPlayerLeaderboardScore" }) do
-            print("[Probe] mgr." .. name .. ":", type(mgr[name]))
-        end
+print("[Probe] sdk exists:", tostring(okSdk), type(sdk))
+if type(sdk) == "table" then
+    for name, fn in pairs(sdk) do
+        print("[Probe] sdk." .. tostring(name) .. ":", type(fn))
     end
 end
 
--- 顺带探测其他可能的社会能力入口
-for _, name in ipairs({ "sdk", "clientCloud", "lobby", "tapSdk", "social" }) do
-    local v = rawget(_G, name)
-    print("[Probe] _G." .. name .. ":", type(v))
+local okTap, tap = pcall(function()
+    return rawget(_G, "tap")
+end)
+print("[Probe] tap exists:", tostring(okTap), type(tap))
+if type(tap) == "table" then
+    for name, fn in pairs(tap) do
+        print("[Probe] tap." .. tostring(name) .. ":", type(fn))
+    end
+end
+
+-- REP 跳转候选方法逐一探测（用于确认「打开链接」能力是否存在）
+local JUMP_CANDIDATES = { "OpenUrl", "openUrl", "OpenWithUrl", "OpenLink", "openLink",
+    "RepOpen", "openRep", "OpenTapTap", "openTapTap", "JumpToTapTap" }
+if type(sdk) == "table" then
+    for _, name in ipairs(JUMP_CANDIDATES) do
+        print("[Probe] sdk jump candidate " .. name .. ":", type(sdk[name]))
+    end
 end
 
 print("[Probe] done")

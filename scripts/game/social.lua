@@ -26,6 +26,11 @@ Social.DAILY_LEADERBOARD_ID = ""
 Social.PENALTY_MISTAKE = 30
 Social.PENALTY_HINT = 60
 
+-- REP 游戏跳转：真机 sdk 打开链接的候选方法名（容器未文档化，运行时探测）
+Social.JUMP_METHODS = { "OpenUrl", "openUrl", "OpenWithUrl", "OpenLink", "openLink",
+    "RepOpen", "openRep", "OpenTapTap", "openTapTap" }
+Social.lastJumpMethod_ = nil
+
 --- 每日榜综合成绩（秒，越小越好）
 function Social.dailyScore(seconds, mistakes, hints)
     seconds = math.max(0, math.floor(tonumber(seconds) or 0))
@@ -72,6 +77,37 @@ function Social.hasDailyBoard()
         return false
     end
     return tapManager() ~= nil
+end
+
+--- 打开 REP 监测链接（跳转 TapTap）。
+--- 容器未文档化「打开链接」API，逐个探测 sdk 的候选方法；都没有则返回 false
+---@param url string 完整 https 链接
+---@return boolean ok 是否成功调起
+---@return string via 命中的方法名或失败原因
+function Social.openJumpUrl(url)
+    local okSdk, sdk = pcall(function()
+        return rawget(_G, "sdk")
+    end)
+    if not okSdk or type(sdk) ~= "table" then
+        return false, "nosdk"
+    end
+    if type(url) ~= "string" or url == "" then
+        return false, "nourl"
+    end
+    for _, name in ipairs(Social.JUMP_METHODS) do
+        local fn = sdk[name]
+        if type(fn) == "function" then
+            local okCall = pcall(function()
+                fn(sdk, url)
+            end)
+            if okCall then
+                Social.lastJumpMethod_ = name
+                print("[Rep] 跳转已受理，via sdk." .. name)
+                return true, name
+            end
+        end
+    end
+    return false, "nomethod"
 end
 
 local function cloud()

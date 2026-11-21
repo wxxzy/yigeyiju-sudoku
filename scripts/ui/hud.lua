@@ -455,6 +455,22 @@ function HUD.new(handlers)
                     settingRow("自动清笔记", self.btnAutoClean),
                     settingRow("候选字号", self.btnFont),
                     settingRow("错误上限", self.btnLimit),
+                    UI.Panel { height = 2 },
+                    UI.Button {
+                        text = "去 TapTap 支持我们",
+                        width = "100%",
+                        height = 38,
+                        fontSize = F.small,
+                        backgroundColor = C.accentSoft,
+                        hoverBackgroundColor = C.cellSelected,
+                        pressedBackgroundColor = C.cellSelected,
+                        textColor = C.accent,
+                        borderRadius = 8,
+                        onClick = function()
+                            self.settingsOverlay:SetVisible(false)
+                            handlers.onJumpTapTap()
+                        end,
+                    },
                     UI.Button {
                         text = "关闭",
                         width = "100%",

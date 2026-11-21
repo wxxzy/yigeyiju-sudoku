@@ -34,6 +34,8 @@ local CONFIG = {
     StatsReserve = 42, -- 棋盘下方成绩条占用（22 高 + 10 间距 + 边框余量）
     PlatformLeaderboardId = "", -- 平台好友榜 ID（空 = 隐藏好友榜入口）
     DailyLeaderboardId = "dk4e5hcoz5ipga5n4y", -- 平台每日一题榜 ID（需配置为升序+日重置+保留最好成绩）
+    RepJumpTestUrl = "https://tap.cn/dSwPaZlJ", -- REP 游戏跳转·联调测试链接（联调期间用）
+    RepJumpUrl = "", -- REP 游戏跳转·正式监测链接（联调通过后在 REP 后台复制，用于结算）
 }
 
 -- 长生命周期引用（Start/Stop 是全局函数，状态只能放模块级）
@@ -241,6 +243,9 @@ function BuildUI()
         end,
         onHome = function()
             GoHome()
+        end,
+        onJumpTapTap = function()
+            JumpToTapTap()
         end,
     }
 
@@ -699,6 +704,19 @@ function SubmitDailyScore()
     local accepted = Social.submitDailyScore(board_.elapsed, board_.mistakes, board_.hintsUsed)
     if accepted then
         hud_:toast("已提交每日榜成绩（错误与提示会折算罚时）", 3)
+    end
+end
+
+--- REP 游戏跳转入口：打开当前生效的监测链接（联调用测试链接，正式用 RepJumpUrl）
+function JumpToTapTap()
+    local url = (CONFIG.RepJumpUrl ~= "" and CONFIG.RepJumpUrl) or CONFIG.RepJumpTestUrl
+    local ok, via = Social.openJumpUrl(url)
+    if not ok then
+        if via == "nosdk" then
+            hud_:toast("当前环境不支持跳转，请在 TapTap 内游玩", 3)
+        else
+            hud_:toast("跳转暂不可用", 2.5)
+        end
     end
 end
 
