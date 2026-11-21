@@ -100,6 +100,21 @@ function TitleView.new(handlers)
         end,
     }
 
+    self.leaderboardButton = UI.Button {
+        text = "排行榜",
+        width = "100%",
+        height = 40,
+        fontSize = F.small,
+        backgroundColor = C.surfaceMuted,
+        hoverBackgroundColor = C.accentSoft,
+        pressedBackgroundColor = C.accentSoft,
+        textColor = C.textSecondary,
+        borderRadius = 10,
+        onClick = function()
+            handlers.onLeaderboard()
+        end,
+    }
+
     self.statsLabel = UI.Label {
         text = "",
         fontSize = F.tiny,
@@ -117,6 +132,120 @@ function TitleView.new(handlers)
         width = "100%",
     }
 
+    -- ---------------------------------------------------------------------
+    -- 排行榜面板：难度 tab + Top10 列表 + 我的排名 + 好友榜入口（能力探测）
+    -- ---------------------------------------------------------------------
+    self.rankTitleLabel = UI.Label {
+        text = "排行榜",
+        fontSize = 26,
+        fontColor = C.textPrimary,
+    }
+
+    self.rankTabs = {}
+    local tabRow = UI.Panel {
+        width = "100%",
+        flexDirection = "row",
+        gap = 8,
+        children = {},
+    }
+    for _, d in ipairs(Sudoku.DIFFICULTIES) do
+        local btn = UI.Button {
+            text = d.label,
+            flex = 1,
+            height = 34,
+            fontSize = F.small,
+            backgroundColor = C.surfaceMuted,
+            hoverBackgroundColor = C.accentSoft,
+            pressedBackgroundColor = C.accentSoft,
+            textColor = C.textSecondary,
+            borderRadius = 8,
+            onClick = function()
+                handlers.onRankTab(d.key)
+            end,
+        }
+        self.rankTabs[d.key] = btn
+        tabRow.children[#tabRow.children + 1] = btn
+    end
+
+    self.rankRows = {}
+    local rowCells = {}
+    for i = 1, 10 do
+        local row = UI.Label {
+            text = "",
+            fontSize = F.small,
+            fontColor = C.textSecondary,
+            width = "100%",
+        }
+        self.rankRows[i] = row
+        rowCells[#rowCells + 1] = row
+    end
+
+    self.rankListPanel = UI.Panel {
+        width = "100%",
+        flexGrow = 1,
+        flexDirection = "column",
+        gap = 6,
+        children = rowCells,
+    }
+
+    self.rankMyLabel = UI.Label {
+        text = "",
+        fontSize = F.small,
+        fontColor = C.accent,
+        width = "100%",
+    }
+
+    self.friendsBoardButton = UI.Button {
+        text = "好友榜",
+        width = "100%",
+        height = 40,
+        fontSize = F.small,
+        backgroundColor = C.surface,
+        hoverBackgroundColor = C.accentSoft,
+        pressedBackgroundColor = C.accentSoft,
+        textColor = C.textPrimary,
+        borderRadius = 10,
+        visible = false, -- 有平台能力时才显示（main 决定）
+        onClick = function()
+            handlers.onFriendsBoard()
+        end,
+    }
+
+    self.rankBackButton = UI.Button {
+        text = "返回",
+        width = "100%",
+        height = 40,
+        fontSize = F.small,
+        backgroundColor = C.surfaceMuted,
+        hoverBackgroundColor = C.accentSoft,
+        pressedBackgroundColor = C.accentSoft,
+        textColor = C.textSecondary,
+        borderRadius = 10,
+        onClick = function()
+            handlers.onRankBack()
+        end,
+    }
+
+    self.rankPanel = UI.Panel {
+        position = "absolute",
+        top = 0,
+        left = 0,
+        right = 0,
+        bottom = 0,
+        backgroundColor = C.background,
+        padding = 16,
+        gap = 10,
+        visible = false,
+        children = {
+            self.rankTitleLabel,
+            tabRow,
+            self.rankListPanel,
+            self.rankMyLabel,
+            self.friendsBoardButton,
+            self.rankBackButton,
+        },
+    }
+
     self.root = UI.Panel {
         position = "absolute",
         top = 0,
@@ -128,11 +257,21 @@ function TitleView.new(handlers)
         justifyContent = "center",
         visible = false,
         children = {
+            -- 主菜单页（home）与排行榜页（rank）互斥切换
             UI.Panel {
-                width = 300,
-                flexDirection = "column",
+                position = "absolute",
+                top = 0,
+                left = 0,
+                right = 0,
+                bottom = 0,
                 alignItems = "center",
-                gap = 12,
+                justifyContent = "center",
+                children = {
+                    UI.Panel {
+                        width = 300,
+                        flexDirection = "column",
+                        alignItems = "center",
+                        gap = 12,
                 children = {
                     UI.Panel { height = 12 },
                     UI.Label {
@@ -156,6 +295,7 @@ function TitleView.new(handlers)
                     self.difficultyRows[2],
                     self.dailyButton,
                     self.settingsButton,
+                    self.leaderboardButton,
                     UI.Panel { height = 6 },
                     self.statsLabel,
                     self.saveInfoLabel,
@@ -167,7 +307,13 @@ function TitleView.new(handlers)
                 },
             },
         },
+        },
+            self.rankPanel,
+        },
     }
+
+    -- root 的第一个子面板就是主菜单页（home），切页时隐藏/显示它
+    self.homeScreen = self.root.children[1]
 
     return self
 end
@@ -228,6 +374,73 @@ function TitleView:setSaveInfo(text)
     local t = text or ""
     self.saveInfoLabel:SetText(t)
     self.saveInfoLabel:SetVisible(t ~= "")
+end
+
+--- 打开排行榜面板（切到排行页）
+function TitleView:showRankPanel()
+    self.root:SetVisible(true)
+    self.homeScreen:SetVisible(false)
+    self.rankPanel:SetVisible(true)
+end
+
+--- 回到主菜单页
+function TitleView:showHomePanel()
+    self.rankPanel:SetVisible(false)
+    self.homeScreen:SetVisible(true)
+end
+
+--- 难度 tab 高亮
+function TitleView:setRankTab(difficulty)
+    for key, btn in pairs(self.rankTabs) do
+        local active = (key == difficulty)
+        btn:SetStyle {
+            backgroundColor = active and C.accentSoft or C.surfaceMuted,
+            textColor = active and C.accent or C.textSecondary,
+        }
+    end
+end
+
+--- 填充榜单行（rows: {rank, name, seconds}；nil/空时清空）
+function TitleView:setRankRows(rows)
+    for i = 1, 10 do
+        local label = self.rankRows[i]
+        local r = rows and rows[i]
+        if r and r.seconds then
+            local name = (r.name and r.name ~= "") and r.name
+                or ("玩家" .. string.sub(r.userId or "", -6))
+            local text = "#" .. tostring(r.rank) .. "  " .. name .. "  "
+                .. HUD.fmtTime(r.seconds)
+            label:SetText(text)
+            label:SetVisible(true)
+        else
+            label:SetText("")
+            label:SetVisible(false)
+        end
+    end
+end
+
+--- 榜单占位/提示行（加载中 / 暂无数据）
+function TitleView:setRankPlaceholder(text)
+    if text and text ~= "" then
+        self.rankRows[1]:SetText(text)
+        self.rankRows[1]:SetVisible(true)
+        for i = 2, 10 do
+            self.rankRows[i]:SetText("")
+            self.rankRows[i]:SetVisible(false)
+        end
+    end
+end
+
+--- 我的排名行（text 空 = 隐藏）
+function TitleView:setMyRank(text)
+    local t = text or ""
+    self.rankMyLabel:SetText(t)
+    self.rankMyLabel:SetVisible(t ~= "")
+end
+
+--- 好友榜入口：仅平台能力可用时显示（main 决定）
+function TitleView:setFriendsBoardVisible(visible)
+    self.friendsBoardButton:SetVisible(visible == true)
 end
 
 function TitleView:show()

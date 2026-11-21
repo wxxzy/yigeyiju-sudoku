@@ -19,6 +19,7 @@ local Settings = require "game.settings"
 local Sfx = require "game.sfx"
 local Storage = require "game.storage"
 local Ad = require "game.ad"
+local Social = require "game.social"
 local BoardView = require "ui.board_view"
 local Keypad = require "ui.keypad"
 local HUD = require "ui.hud"
@@ -31,6 +32,7 @@ local CONFIG = {
     LayoutCheckInterval = 0.25, -- 秒：多久重测一次可用空间
     AutosaveInterval = 10, -- 秒：有改动后多久落一次存档
     StatsReserve = 42, -- 棋盘下方成绩条占用（22 高 + 10 间距 + 边框余量）
+    PlatformLeaderboardId = "", -- 平台好友榜 ID（开发者中心创建后填入；空 = 隐藏好友榜入口）
 }
 
 -- 长生命周期引用（Start/Stop 是全局函数，状态只能放模块级）
@@ -254,7 +256,25 @@ function BuildUI()
         onSettings = function()
             hud_:showSettings()
         end,
+        onLeaderboard = function()
+            OpenLeaderboard(pendingDifficulty_ or CONFIG.Difficulty)
+        end,
+        onRankTab = function(difficulty)
+            OpenLeaderboard(difficulty)
+        end,
+        onRankBack = function()
+            titleView_:showHomePanel()
+            RefreshTitleInfo()
+        end,
+        onFriendsBoard = function()
+            if not Social.showPlatformLeaderboard("friends") then
+                hud_:toast("好友榜暂不可用，稍后再试", 2.5)
+            end
+        end,
     }
+
+    -- 平台好友榜榜单 ID（开发者中心「游戏服务 → 游戏排行」创建后填入；空 = 不启用）
+    Social.PLATFORM_LEADERBOARD_ID = CONFIG.PlatformLeaderboardId or ""
 
     -- 棋盘容器：占满顶栏与键盘之间的剩余空间，实际边长由 FitBoard 按空间算出
     -- 棋盘与其下方的成绩条作为一个整体垂直居中，避免两者被拉开
@@ -634,6 +654,35 @@ function RefreshTitleInfo()
     end
 end
 
+--- 打开全服排行榜面板并按难度加载
+---@param difficulty string
+function OpenLeaderboard(difficulty)
+    difficulty = difficulty or "normal"
+    titleView_:showRankPanel()
+    titleView_:setRankTab(difficulty)
+    titleView_:setRankPlaceholder("加载中…")
+    titleView_:setMyRank("")
+
+    Social.loadTop(difficulty, 10, function(rows, status)
+        if rows and #rows > 0 then
+            titleView_:setRankRows(rows)
+        else
+            titleView_:setRankPlaceholder(rows ~= nil and "还没有人上榜，快来抢第一" or "榜单暂不可用")
+        end
+    end)
+
+    Social.loadMyRank(difficulty, function(my)
+        if my and my.rank then
+            local t = my.seconds and (" · " .. HUD.fmtTime(my.seconds)) or ""
+            titleView_:setMyRank("我的排名 #" .. tostring(my.rank) .. t)
+        else
+            titleView_:setMyRank("完成一局普通/每日挑战即可上榜")
+        end
+    end)
+
+    titleView_:setFriendsBoardVisible(Social.hasPlatformLeaderboard())
+end
+
 --- 难度按钮：只切换待开局难度，不碰当前盘
 function CycleDifficulty()
     pendingDifficulty_ = NextDifficulty(pendingDifficulty_)
@@ -822,6 +871,10 @@ function HandleUpdate(eventType, eventData)
             -- 普通局：用时更短才刷新，记录该局的错误次数
             isRecord, prevBest = Records.submit(records_, board_.difficulty, board_.elapsed, board_.mistakes)
             RefreshStatsBar()
+            -- 破纪录才提交全服榜（clientCloud iscores 是覆盖写，提交即保持最优）
+            if isRecord then
+                Social.submitBest(board_.difficulty, board_.elapsed)
+            end
         end
 
         Storage.saveStats(records_)
