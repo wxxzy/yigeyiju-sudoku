@@ -341,8 +341,8 @@ function Board:spendHint()
     end
 end
 
---- 求下一步提示（两段式的第一步）：只标格和给理由，不落笔。
---- 次数用尽即拒绝；同一格再点一次才会填入（见 main 的提示流程）
+--- 求下一步提示：标记目标格并给出理由，不落笔、不扣次数。
+--- 次数用尽即拒绝；实际填入走 applyHint（扣次数），由 main 的提示流程一次调用完成
 ---@return table|nil { idx, value, level, reason }
 function Board:requestHint()
     if self.solved or self:hintsLeft() <= 0 then

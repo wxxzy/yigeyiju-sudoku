@@ -532,7 +532,41 @@ local function HasProgress()
     return board_.started and not board_.solved and not board_.failed
 end
 
---- 提示入口（键盘 H 与工具键共用）：先讲理由，再点一次落笔。
+--- 求一步提示并立即填入：一次点击即得到答案，次数在填入时扣除。
+--- 普通提示与「看广告 +1」共用，避免两套流程行为不一致。
+---@param prefix string|nil 提示文案前缀（如「提示 +1」）
+---@return boolean 是否成功填入
+local function ApplyHintNow(prefix)
+    if board_:hintsLeft() <= 0 then
+        return false
+    end
+
+    local step = board_:requestHint()
+    if not step then
+        hud_:toast("当前盘面没有能一步确定的格子，试试打开候选数或换个角度", 3.5)
+        return false
+    end
+
+    if not board_:applyHint() then
+        -- 盘面在两次调用之间被改动（极少见）：清掉标记，不消耗次数
+        board_:clearHint()
+        hud_:toast("这一格的状态已经变了，再点一次「提示」即可", 2.5)
+        return false
+    end
+
+    boardView_:flash(step.idx, "hint")
+    Sfx.play("place")
+    RefreshAll()
+
+    local pos = "第" .. tostring(Sudoku.ROW[step.idx]) .. "行第"
+        .. tostring(Sudoku.COL[step.idx]) .. "列"
+    hud_:toast((prefix and (prefix .. "：") or "提示：") .. pos
+        .. " 填 " .. tostring(step.value) .. " · " .. step.reason
+        .. "（剩余 " .. tostring(board_:hintsLeft()) .. " 次）", 4)
+    return true
+end
+
+--- 提示入口（键盘 H 与工具键共用）：点一次即填入答案并说明理由。
 --- 次数按难度限额（sudoku.DIFFICULTIES 的 hintLimit），用完可看广告补充
 function DoHint()
     if hud_ and hud_:isModalOpen() then
@@ -544,23 +578,9 @@ function DoHint()
         return
     end
 
-    -- 第一次点：标出可确定的格并说明理由；再点一次才填入
-    if board_.hintIdx then
-        local idx = board_.hintIdx
-        board_:applyHint()
-        boardView_:flash(idx, "hint")
-        Sfx.play("place")
+    if not ApplyHintNow() then
         RefreshAll()
-        return
     end
-
-    local step = board_:requestHint()
-    if step then
-        hud_:toast("提示：" .. step.reason .. "（再点一次「提示」直接填入）", 3.5)
-    else
-        hud_:toast("当前盘面没有能一步确定的格子，试试打开候选数或换个角度", 3.5)
-    end
-    RefreshAll()
 end
 
 --- 提示用尽时：提供「看广告 +1」入口；环境不支持广告则退回纯提示
@@ -597,10 +617,8 @@ function WatchAdForHint()
         end
 
         board_:grantBonusHint()
-        local step = board_:requestHint()
-        if step then
-            hud_:toast("提示 +1：" .. step.reason .. "（再点一次「提示」直接填入）", 4)
-        else
+        -- 发奖后直接把这一步填上（与普通提示同一套流程）
+        if not ApplyHintNow("提示 +1") then
             hud_:toast("提示 +1（当前盘面暂时没有能一步确定的格子）", 3)
         end
         saveDirty_ = true
