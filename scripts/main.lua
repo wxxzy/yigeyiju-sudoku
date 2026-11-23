@@ -533,10 +533,8 @@ local function HasProgress()
 end
 
 --- 求一步提示并立即填入：一次点击即得到答案，次数在填入时扣除。
---- 普通提示与「看广告 +1」共用，避免两套流程行为不一致。
----@param prefix string|nil 提示文案前缀（如「提示 +1」）
 ---@return boolean 是否成功填入
-local function ApplyHintNow(prefix)
+local function ApplyHintNow()
     if board_:hintsLeft() <= 0 then
         return false
     end
@@ -560,7 +558,7 @@ local function ApplyHintNow(prefix)
 
     local pos = "第" .. tostring(Sudoku.ROW[step.idx]) .. "行第"
         .. tostring(Sudoku.COL[step.idx]) .. "列"
-    hud_:toast((prefix and (prefix .. "：") or "提示：") .. pos
+    hud_:toast("提示：" .. pos
         .. " 填 " .. tostring(step.value) .. " · " .. step.reason
         .. "（剩余 " .. tostring(board_:hintsLeft()) .. " 次）", 4)
     return true
@@ -617,12 +615,11 @@ function WatchAdForHint()
         end
 
         board_:grantBonusHint()
-        -- 发奖后直接把这一步填上（与普通提示同一套流程）
-        if not ApplyHintNow("提示 +1") then
-            hud_:toast("提示 +1（当前盘面暂时没有能一步确定的格子）", 3)
-        end
+        -- 只兑换额度，不替玩家落子：什么时候用这一次提示由玩家自己决定
         saveDirty_ = true
         RefreshAll()
+        hud_:toast("提示次数 +1（剩余 " .. tostring(board_:hintsLeft())
+            .. " 次），点「提示」即可使用", 3.5)
     end)
 
     if not accepted then
